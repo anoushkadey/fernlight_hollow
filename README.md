@@ -1,6 +1,8 @@
 # Fernlight Hollow
 
-A small, cozy pixel-art forest game that runs in the browser. There's no ending. You forage, keep your three hearts and your stamina up, run errands for Grandma Hazel, and trade food for potions with Belladonna the witch, for as long as you like.
+A cozy pixel-art forest game that runs in the browser.
+
+**The story.** Grandma Hazel used to tell you about the fernlight, a flower deep in the Hollow that only opens in the dark. Then her letter comes: her garden has gone grey, and so has she. You walk into the woods with a basket. Make her soup, carry her letter to the witch in the Dark Wood (who turns out to be her sister, forty years estranged), brew a Moonlantern, find the fernlight in the Old Glade after dark, and bring the colour back. After the epilogue the forest stays open: forage, run errands, brew, for as long as you like.
 
 ## Play
 
@@ -20,7 +22,7 @@ python3 -m http.server 8000
 | WASD / arrow keys | Walk (hold Shift to run) |
 | E / Space | Pick up, harvest, talk, read |
 | Q | Character ability |
-| B | Basket (holds 15 things) |
+| B / J | Basket (holds 15 things) / Journal |
 | Esc | Pause |
 
 On touch screens, an on-screen stick and buttons appear.
@@ -42,12 +44,19 @@ On touch screens, an on-screen stick and buttons appear.
 - **Belladonna** (west, in the Dark Wood) trades potions for food, poison included, has her own errands, and lets you use her cauldron. Three ingredients in, one bottle out.
 - **Day and night** cycle every eight minutes. More wisps come out at night.
 
+## Art credits
+
+The portraits of Draco, Sage and Willow in `assets/portraits/` are reduced from reference art supplied for this project by its owner. They are not original to this repository; replace them, or get the artists' permission, before publishing the game publicly. Everything else (Hazel and Belladonna, the world, items, UI frames, cutscene panels and music) is drawn or synthesised in code.
+
 ## Code
 
 Plain JavaScript, no dependencies:
 
-- `js/sprites.js`: hand-placed pixel art (portraits, characters, items, icons)
-- `js/art.js`: procedural pixel art (trees, cottage, den, props)
+- `js/sprites.js`: hand-placed pixel art (portraits, characters, items, icons) and the HD upscaling/shading passes
+- `js/art.js`: procedural pixel art (trees, cottage, den, standing stones, the fernlight)
+- `js/frames.js`: the UI kit: wood-and-gold frames, plaques, paper and wood textures, vines and ribbons
+- `js/story.js`: story steps, beats and the comic-panel cutscenes
+- `js/cauldron.js`: the brewing-table scene
 - `js/world.js`: map layout, collision and ground baking
 - `js/game.js`: simulation, abilities and rendering, including lighting
 - `js/ui.js`: HUD, dialogue, basket, witch's shop and cauldron, menus

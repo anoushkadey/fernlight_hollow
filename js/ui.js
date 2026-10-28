@@ -1,6 +1,6 @@
-// Everything drawn in the DOM: HUD, dialogue, the basket book, the witch's table,
-// title, character select, pause and game over. Panels sit on a layer stack;
-// the top layer gets the keyboard.
+// Everything drawn in the DOM: HUD, visual-novel dialogue, comic cutscenes, the
+// basket book, the witch's counter, title, character select, pause and game over.
+// Panels sit on a layer stack; the top layer gets the keyboard.
 (function (FH) {
   'use strict';
 
@@ -10,16 +10,40 @@
   const el = (html) => { const d = document.createElement('div'); d.innerHTML = html.trim(); return d.firstElementChild; };
   const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const sfx = (n) => FH.audio.sfx(n);
+  const pickLine = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
   const NAMES = { draco: 'Draco', sage: 'Sage', willow: 'Willow', grandma: 'Grandma Hazel', witch: 'Belladonna' };
+  const PLAYABLE = ['draco', 'sage', 'willow'];
 
   function img(canvas, scale, key, cls) {
     return '<img class="px ' + (cls || '') + '" src="' + FH.spriteURL(canvas, scale, key) + '" width="' + canvas.width * scale + '" height="' + canvas.height * scale + '" alt="">';
   }
   const itemImg = (id, s, cls) => img(FH.itemSprite(id), s, 'item-' + id, cls);
+  const itemBig = (id, s) => img(FH.itemSpriteHD(id), s, 'itemhd-' + id);
+  UI.itemBig = itemBig;
   const iconImg = (n, s, cls) => img(FH.icon(n), s, 'icon-' + n, cls);
-  const portraitImg = (who, mood, s, cls) => img(FH.portrait(who, mood), s, 'por-' + who + '-' + (mood || 'open'), cls);
+  // The three wanderers use their painted portraits; Hazel and Belladonna are drawn in code.
+  UI.portraitURL = (who, mood) => PLAYABLE.includes(who) ? 'assets/portraits/' + who + '.png' : FH.spriteURL(FH.portraitHD(who, mood), 3, 'hd-' + who + '-' + (mood || 'open'));
+  const portrait = (who, mood, cls) => '<img class="px portrait ' + (cls || '') + '" src="' + UI.portraitURL(who, mood) + '" alt="' + esc(NAMES[who] || '') + '">';
   UI.itemImg = itemImg; UI.iconImg = iconImg;
+  const D = () => FH.decor;
+  const vines = () => '<img class="px vine vine-l" src="' + D().vineL + '" alt=""><img class="px vine vine-r" src="' + D().vineR + '" alt="">';
+  const flourish = () => '<img class="px flourish" src="' + D().flourish + '" alt="">';
+
+  // Ragged paper edge, cut fresh for each element so no two notes match.
+  UI.tear = function (node, jag) {
+    const w = node.offsetWidth, h = node.offsetHeight;
+    if (!w || !h) return;
+    jag = jag || 6;
+    const step = 9, snap = v => Math.round(v / 3) * 3;
+    const pts = [];
+    const r = Math.random;
+    for (let x = 0; x <= w; x += step) pts.push([Math.min(x, w), snap(r() * jag)]);
+    for (let y = step; y <= h; y += step) pts.push([w - snap(r() * jag * 0.6), Math.min(y, h)]);
+    for (let x = w - step; x >= 0; x -= step) pts.push([Math.max(x, 0), h - snap(r() * jag)]);
+    for (let y = h - step; y > 0; y -= step) pts.push([snap(r() * jag * 0.6), y]);
+    node.style.clipPath = 'polygon(' + pts.map(p => p[0] + 'px ' + p[1] + 'px').join(',') + ')';
+  };
 
   // ---------- layer stack ----------
   UI.push = function (layer) {
@@ -36,11 +60,11 @@
     const L = UI.layers.splice(i, 1)[0];
     L.el.classList.remove('in');
     L.el.classList.add('out');
-    setTimeout(() => L.el.remove(), 160);
+    setTimeout(() => L.el.remove(), 180);
     if (L.onClose) L.onClose();
     G.paused = UI.layers.length > 0;
     document.body.classList.toggle('layer-open', G.paused);
-    UI.hud();
+    UI.hud(true);
     if (!G.paused && G.mode === 'play') G.save();
   };
   UI.top = () => UI.layers[UI.layers.length - 1];
@@ -56,30 +80,44 @@
   UI.buildHud = function () {
     const hud = $('#hud');
     hud.innerHTML = `
-      <div class="hud-left panel slim">
-        <div class="hearts" id="hud-hearts"></div>
-        <div class="stam-row"><span class="ico">${iconImg('bolt', 3)}</span><div class="bar"><div class="fill" id="hud-stam"></div><div class="ticks"></div></div></div>
-        <div class="bag-row"><span class="ico">${iconImg('basket', 3)}</span><span id="hud-bag">0 / 15</span><span class="kbd small">B</span></div>
-      </div>
-      <div class="hud-clock wood">
-        <div class="clock-inner">
-          <span class="clock-ico" id="hud-sky"></span>
-          <div><div class="clock-time" id="hud-time">08:00 AM</div><div class="clock-day" id="hud-day">DAY 1</div></div>
+      <div class="vitals">
+        <img class="px medal" src="${D().heartMedal}" alt="">
+        <div class="vitals-bar">
+          <div class="hearts" id="hud-hearts"></div>
+          <div class="stam"><div class="stam-fill" id="hud-stam"></div><div class="stam-shine"></div></div>
         </div>
-        <div class="zone" id="hud-zone">Fernlight Meadow</div>
       </div>
+      <div class="bag-chip" id="hud-bagchip">${iconImg('basket', 3)}<span id="hud-bag">0/15</span></div>
+      <div class="clock">
+        <div class="clock-pill"><div class="clock-time" id="hud-time">08:00 AM</div><div class="clock-sub"><span id="hud-day">Day 1</span> · <span id="hud-zone">Fernlight Meadow</span></div></div>
+        <div class="clock-emblem" id="hud-sky"></div>
+      </div>
+      <div class="quest paper" id="hud-quest"><div class="q-ch" id="hud-qch"></div><div class="q-goal" id="hud-qgoal"></div></div>
       <div class="hud-ability" id="hud-ability"></div>
       <div class="hud-buffs" id="hud-buffs"></div>
-      <div class="hud-keys">
-        <span><b class="kbd">E</b> interact</span><span><b class="kbd">Q</b> ability</span><span><b class="kbd">B</b> basket</span><span><b class="kbd">Shift</b> run</span><span><b class="kbd">Esc</b> pause</span>
-      </div>`;
+      <div class="side-tabs">
+        <button class="stab" data-a="basket" title="Basket (B)">${iconImg('basket', 3)}</button>
+        <button class="stab" data-a="journal" title="Journal (J)">${iconImg('book', 3)}</button>
+        <button class="stab" data-a="pause" title="Pause (Esc)"><span class="gear">II</span></button>
+      </div>
+      <div class="hud-keys"><span><b class="kbd">E</b> interact</span><span><b class="kbd">Q</b> ability</span><span><b class="kbd">Shift</b> run</span></div>`;
+    hud.querySelectorAll('.stab').forEach(b => {
+      b.onclick = () => {
+        if (G.mode !== 'play' || G.paused) return;
+        FH.audio.start();
+        if (b.dataset.a === 'basket') UI.openBook('basket');
+        else if (b.dataset.a === 'journal') UI.openBook('journal');
+        else UI.pause();
+      };
+    });
   };
 
   let hudCache = {};
-  UI.hud = function () {
+  UI.hud = function (force) {
     if (G.mode !== 'play' && G.mode !== 'over') return;
     const p = G.player;
-    if (!p) return;
+    if (!p || !$('#hud-hearts')) return;
+    if (force) hudCache.quest = null;
     const hearts = p.hearts + '|' + FH.MAX_HEARTS;
     if (hudCache.hearts !== hearts) {
       hudCache.hearts = hearts;
@@ -88,40 +126,48 @@
       $('#hud-hearts').innerHTML = h;
       $('#hud-hearts').classList.remove('bump'); void $('#hud-hearts').offsetWidth; $('#hud-hearts').classList.add('bump');
     }
-    const st = $('#hud-stam');
     const pct = Math.round(p.stam / p.maxStam * 100);
+    const st = $('#hud-stam');
     st.style.width = pct + '%';
     st.classList.toggle('low', pct < 25);
-    st.classList.toggle('empty', pct <= 0);
-    $('#hud-bag').textContent = p.basket.length + ' / ' + FH.BASKET_MAX;
-    $('#hud-bag').classList.toggle('full', p.basket.length >= FH.BASKET_MAX);
+    $('#hud-bag').textContent = p.basket.length + '/' + FH.BASKET_MAX;
+    $('#hud-bagchip').classList.toggle('full', p.basket.length >= FH.BASKET_MAX);
     $('#hud-time').textContent = FH.clockText();
-    $('#hud-day').textContent = 'DAY ' + G.day;
+    $('#hud-day').textContent = 'Day ' + G.day;
     const sky = FH.isNight() ? 'moon' : 'sun';
-    if (hudCache.sky !== sky) { hudCache.sky = sky; $('#hud-sky').innerHTML = iconImg(sky, 4); }
+    if (hudCache.sky !== sky) { hudCache.sky = sky; $('#hud-sky').innerHTML = iconImg(sky, 4); $('#hud-sky').classList.toggle('night', sky === 'moon'); }
     const zone = G.zoneName();
     if (hudCache.zone !== zone) {
       hudCache.zone = zone; $('#hud-zone').textContent = zone;
-      $('#hud-clock-zone-dark');
-      document.body.classList.toggle('in-dark', zone === 'The Dark Wood' || zone === "Belladonna's Den");
+      document.body.classList.toggle('in-dark', zone === 'The Dark Wood' || zone === "Belladonna's Den" || zone === 'The Old Glade');
+    }
+    // quest note
+    const info = FH.story.info();
+    const q = info.ch + info.title + info.goal;
+    if (hudCache.quest !== q) {
+      hudCache.quest = q;
+      $('#hud-qch').textContent = (info.ch === '~' ? 'Epilogue' : 'Chapter ' + info.ch) + ' · ' + info.title;
+      $('#hud-qgoal').textContent = info.goal;
+      const qn = $('#hud-quest');
+      qn.classList.remove('flash'); void qn.offsetWidth; qn.classList.add('flash');
+      requestAnimationFrame(() => UI.tear(qn, 4));
     }
     // ability card
     const c = FH.CHARACTERS[p.who];
     if (hudCache.who !== p.who) {
       hudCache.who = p.who;
-      $('#hud-ability').innerHTML = `<div class="ab-face wood">${portraitImg(p.who, 'open', 2, 'face')}<div class="cd" id="hud-cd"></div><span class="kbd ab-key">Q</span></div>
+      $('#hud-ability').innerHTML = `<div class="ab-face">${portrait(p.who, 'open', 'face')}<div class="cd" id="hud-cd"></div><span class="kbd ab-key">Q</span></div>
         <div class="ab-text"><div class="ab-name">${esc(c.ability.name)}</div><div class="ab-state" id="hud-cdtext">Ready</div></div>`;
     }
     const cdPct = p.cd > 0 ? p.cd / c.ability.cooldown : 0;
     $('#hud-cd').style.setProperty('--cd', (cdPct * 360) + 'deg');
     $('#hud-cd').classList.toggle('on', p.cd > 0);
-    $('#hud-cdtext').textContent = p.cd > 0 ? Math.ceil(p.cd) + 's' : 'Ready';
+    $('#hud-cdtext').textContent = p.cd > 0 ? 'ready in ' + Math.ceil(p.cd) + 's' : 'Ready';
     $('#hud-cdtext').classList.toggle('ready', p.cd <= 0);
-    // buffs
     const names = { swift: ["Hare's Step", 'swift'], owl: ["Owl's Eye", 'owl'], thorn: ['Thornward', 'thorn'], hiccup: ['Hiccups', 'murky'] };
     let b = '';
-    Object.keys(p.buffs).forEach(k => { if (p.buffs[k] > 0) b += '<div class="buff panel slim">' + itemImg(names[k][1], 2) + '<span>' + names[k][0] + '</span><b>' + Math.ceil(p.buffs[k]) + 's</b></div>'; });
-    if (p.stam <= 0) b += '<div class="buff panel slim warn">' + iconImg('bolt', 2) + '<span>Exhausted</span><b>eat!</b></div>';
+    Object.keys(p.buffs).forEach(k => { if (p.buffs[k] > 0) b += '<div class="buff">' + itemImg(names[k][1], 2) + '<span>' + names[k][0] + '</span><b>' + Math.ceil(p.buffs[k]) + 's</b></div>'; });
+    if (p.stam <= 0) b += '<div class="buff warn">' + iconImg('bolt', 2) + '<span>Exhausted</span><b>eat!</b></div>';
     if (hudCache.buffs !== b) { hudCache.buffs = b; $('#hud-buffs').innerHTML = b; }
   };
   UI.resetHudCache = () => { hudCache = {}; };
@@ -132,28 +178,26 @@
     if (barkState && !force && barkState.t > 0) return;
     barkState = { text, t: Math.min(6, 2 + text.length / 22) };
     const b = $('#bark');
-    b.textContent = text;
+    b.innerHTML = '<span>' + esc(text) + '</span>';
     b.classList.remove('show'); void b.offsetWidth; b.classList.add('show');
   };
   UI.frame = function (dt) {
     if (G.mode !== 'play') { $('#prompt').classList.remove('show'); $('#bark').classList.remove('show'); return; }
     const p = G.player;
-    // prompt
     const pr = $('#prompt');
     if (G.prompt && !G.paused) {
       const target = G.prompt.ref && G.prompt.ref.x !== undefined ? G.prompt.ref : (G.prompt.kind === 'cauldron' ? G.world.cauldron : p);
-      const s = G.worldToScreen(target.x, target.y - (G.prompt.kind === 'npc' ? 34 : 18));
+      const s = G.worldToScreen(target.x, target.y - (G.prompt.kind === 'npc' ? 34 : G.prompt.kind === 'fernlight' ? 30 : 18));
       promptTop = s.y - pr.offsetHeight;
       pr.style.transform = 'translate(' + Math.round(s.x) + 'px,' + Math.round(s.y) + 'px) translate(-50%,-100%)';
       if (pr.dataset.label !== G.prompt.label) { pr.dataset.label = G.prompt.label; pr.innerHTML = '<span class="kbd">E</span>' + esc(G.prompt.label); }
       pr.classList.add('show');
     } else { pr.classList.remove('show'); promptTop = null; }
-    // bark, lifted clear of the prompt when both are up
     const b = $('#bark');
     if (barkState) {
       barkState.t -= dt;
       const s = G.worldToScreen(p.x, p.y - 26);
-      if (promptTop !== null) s.y = Math.min(s.y, promptTop - 10);
+      if (promptTop !== null) s.y = Math.min(s.y, promptTop - 12);
       b.style.transform = 'translate(' + Math.round(s.x) + 'px,' + Math.round(s.y) + 'px) translate(-50%,-100%)';
       if (barkState.t <= 0 || G.paused) { b.classList.remove('show'); if (barkState.t <= 0) barkState = null; }
       else b.classList.add('show');
@@ -164,37 +208,57 @@
   UI.toast = function (text, kind, itemId) {
     if (!text) return;
     const box = $('#toasts');
-    const t = el('<div class="toast panel slim ' + (kind || '') + '">' + (itemId ? itemImg(itemId, 2) : '') + '<span>' + esc(text) + '</span></div>');
+    const t = el('<div class="toast ' + (kind || '') + '">' + (itemId ? itemImg(itemId, 2) : '') + '<span>' + esc(text) + '</span></div>');
     box.appendChild(t);
-    while (box.children.length > 5) box.firstChild.remove();
+    requestAnimationFrame(() => UI.tear(t, 3));
+    while (box.children.length > 4) box.firstChild.remove();
     setTimeout(() => t.classList.add('out'), 2600);
     setTimeout(() => t.remove(), 3100);
   };
 
-  // ---------- dialogue ----------
+  UI.chapterCard = function (ch, title) {
+    // wait for any dialogue or cutscene to finish first
+    if (UI.layers.length) { setTimeout(() => UI.chapterCard(ch, title), 400); return; }
+    const c = el('<div class="chapter-card"><div class="cc-plaque"><div class="cc-ch">' + (ch === '~' ? 'Epilogue' : 'Chapter ' + ch) + '</div><div class="cc-title">' + esc(title) + '</div></div>' + flourish() + '</div>');
+    $('#app').appendChild(c);
+    sfx('morning');
+    setTimeout(() => c.classList.add('out'), 2800);
+    setTimeout(() => c.remove(), 3500);
+  };
+
+  // ---------- dialogue (visual-novel layout) ----------
   UI.say = function (lines, onDone) {
     let i = 0, shown = 0, full = '', timer = null, choiceIdx = 0;
-    const box = el(`<div class="layer dialog-layer">
-      <div class="dialog">
-        <div class="dlg-portrait wood"><div class="por"></div><div class="nameplate"></div></div>
-        <div class="dlg-body panel"><div class="dlg-text"></div><div class="dlg-more">▼</div></div>
-        <div class="dlg-choices panel"></div>
+    const box = el(`<div class="layer vn-layer">
+      <div class="vn-stage"><div class="vn-actor left"></div><div class="vn-actor right"></div></div>
+      <div class="vn-box">
+        <div class="vn-name"></div>
+        <div class="vn-paper"><div class="vn-text"></div><div class="vn-more">▼</div></div>
+        <div class="vn-choices"></div>
       </div></div>`);
     const layer = { el: box };
-    const textEl = $('.dlg-text', box), more = $('.dlg-more', box), choicesEl = $('.dlg-choices', box);
+    const textEl = $('.vn-text', box), more = $('.vn-more', box), choicesEl = $('.vn-choices', box);
+    const paper = $('.vn-paper', box);
+    const actorL = $('.vn-actor.left', box), actorR = $('.vn-actor.right', box);
     const show = () => {
       const L = lines[i];
       const who = L.who;
-      const por = $('.dlg-portrait', box);
+      const side = PLAYABLE.includes(who) ? 'right' : 'left';
+      [actorL, actorR].forEach(a => a.classList.remove('speaking'));
       if (who) {
-        por.style.display = '';
-        $('.por', box).innerHTML = portraitImg(who, L.mood || 'open', 4);
-        $('.nameplate', box).textContent = NAMES[who] || who;
-        $('.nameplate', box).style.setProperty('--tag', who === 'witch' ? '#4d3674' : who === 'grandma' ? '#4b6a34' : (FH.CHARACTERS[who] ? '#6b4428' : '#6b4428'));
-        box.querySelector('.dialog').classList.remove('narrator');
+        const a = side === 'left' ? actorL : actorR;
+        const key = who + ':' + (L.mood || 'open');
+        if (a.dataset.key !== key) {
+          a.innerHTML = '<div class="actor-frame">' + portrait(who, L.mood) + '</div>';
+          a.dataset.key = key;
+        }
+        a.classList.add('shown', 'speaking');
+        $('.vn-name', box).textContent = NAMES[who] || who;
+        $('.vn-name', box).className = 'vn-name ' + side + ' ' + who;
+        box.classList.remove('narrator');
       } else {
-        por.style.display = 'none';
-        box.querySelector('.dialog').classList.add('narrator');
+        $('.vn-name', box).className = 'vn-name hide';
+        box.classList.add('narrator');
       }
       full = L.text; shown = 0; textEl.textContent = '';
       more.style.visibility = 'hidden';
@@ -250,7 +314,57 @@
     layer.onClose = () => clearInterval(timer);
     box.addEventListener('click', () => advance());
     UI.push(layer);
+    requestAnimationFrame(() => UI.tear(paper, 6));
     show();
+    return layer;
+  };
+
+  // ---------- comic cutscenes ----------
+  UI.comic = function (panels, onDone) {
+    const many = panels.length > 1;
+    const box = el(`<div class="layer comic-layer"><div class="comic ${many ? 'grid' : 'single'}">${panels.map((p, k) =>
+      '<figure class="cpanel" data-k="' + k + '"><canvas width="160" height="100"></canvas><figcaption></figcaption></figure>').join('')}</div>
+      <div class="comic-hint"><span class="kbd">E</span> continue</div></div>`);
+    const layer = { el: box, k: -1, typing: null };
+    const figs = Array.from(box.querySelectorAll('.cpanel'));
+    let raf = 0, t0 = performance.now(), timer = null, shown = 0, full = '';
+    const draw = (now) => {
+      const t = (now - t0) / 1000;
+      figs.forEach((f, k) => {
+        if (k > layer.k) return;
+        const g = f.querySelector('canvas').getContext('2d');
+        g.imageSmoothingEnabled = false;
+        const art = FH.story.ART[panels[k].art];
+        if (art) art(g, 160, 100, t + k);
+      });
+      raf = requestAnimationFrame(draw);
+    };
+    const reveal = () => {
+      layer.k++;
+      if (layer.k >= panels.length) { UI.pop(layer); if (onDone) onDone(); return; }
+      const f = figs[layer.k];
+      f.classList.add('on');
+      sfx('page');
+      full = panels[layer.k].text || ''; shown = 0;
+      const cap = f.querySelector('figcaption');
+      clearInterval(timer);
+      timer = setInterval(() => {
+        shown++;
+        cap.textContent = full.slice(0, shown);
+        if (shown % 3 === 0) sfx('blip');
+        if (shown >= full.length) clearInterval(timer);
+      }, 24);
+    };
+    const advance = () => {
+      if (shown < full.length) { clearInterval(timer); shown = full.length; figs[layer.k].querySelector('figcaption').textContent = full; return; }
+      reveal();
+    };
+    layer.onKey = (code) => { if (['Enter', 'Space', 'KeyE', 'Escape'].includes(code)) advance(); };
+    layer.onClose = () => { cancelAnimationFrame(raf); clearInterval(timer); };
+    box.addEventListener('click', advance);
+    UI.push(layer);
+    raf = requestAnimationFrame(draw);
+    reveal();
     return layer;
   };
 
@@ -280,11 +394,11 @@
   UI.canAfford = (cost) => !!UI.payPlan(UI.discounted(cost));
   const costText = (cost) => cost.map(c => c.n + ' ' + (c.n === 1 ? FH.SINGULAR[c.tag] : FH.TAG_NAMES[c.tag])).join(' · ');
   const removeIdx = (idxs) => { idxs.sort((a, b) => b - a).forEach(i => G.player.basket.splice(i, 1)); };
+  UI.removeIdx = removeIdx;
 
-  // errand matching
   function needMatches(need, it, strict) {
     const d = FH.ITEMS[it.id];
-    if (d.kind === 'Potion') return false;
+    if (d.kind === 'Potion' || d.kind === 'Keepsake') return false;
     if (need.toxic) return !!d.toxic;
     if (need.id) return it.id === need.id;
     return d.tags.includes(need.tag) && !(strict && d.toxic);
@@ -321,7 +435,6 @@
   };
   UI.errandPlan = errandPlan;
   UI.needLabel = needLabel;
-
   function newErrand(who) {
     const pool = FH.ERRANDS[who];
     let n = G.errands[who];
@@ -330,8 +443,8 @@
   }
 
   // ---------- Grandma ----------
-  const pickLine = (arr) => arr[Math.floor(Math.random() * arr.length)];
   UI.talkGrandma = function () {
+    if (FH.story.onGrandma()) return;
     if (!G.flags.metGrandma) {
       G.flags.metGrandma = true;
       UI.say(FH.LINES.grandmaFirst.map(([mood, text]) => ({ who: 'grandma', mood, text })), () => UI.grandmaMenu());
@@ -341,23 +454,24 @@
   };
   UI.grandmaMenu = function (greet) {
     const h = FH.hour();
-    const hello = greet || (h < 11 ? 'Morning, love. What can I do for you?' : h < 17 ? 'Afternoon, dear. You look peaky. Everything all right?' : "Evening. Mind the step, I can't see it either.");
-    UI.say([{ who: 'grandma', mood: 'happy', text: hello, choices: [
+    const hello = greet || (h < 11 ? 'Morning, love. What can I do for you?' : h < 17 ? 'Afternoon, dear. Everything all right?' : "Evening. Mind the step, I can't see it either.");
+    const choices = [
       { label: 'Just chatting', fn: () => UI.say([{ who: 'grandma', mood: Math.random() < 0.5 ? 'happy' : 'open', text: pickLine(FH.LINES.grandmaChat) }], () => UI.grandmaMenu('Anything else?')) },
-      { label: 'About that errand…', fn: () => UI.grandmaErrand() },
+    ];
+    if (G.story.step >= 2) choices.push({ label: 'Any errands for me?', fn: () => UI.grandmaErrand() });
+    choices.push(
       { label: 'Any vegetables to spare?', fn: () => UI.grandmaVeg() },
       { label: 'Could I rest by the stove?', fn: () => UI.grandmaRest() },
-      { label: 'Goodbye', fn: () => UI.say([{ who: 'grandma', mood: 'happy', text: pickLine(['Off you go. Eat something green.', 'Bye, love. Mind the brambles.', "Come back before dark. Or after. I'm always up."]) }]) },
-    ] }]);
+      { label: 'Goodbye', fn: () => UI.say([{ who: 'grandma', mood: 'happy', text: pickLine(['Off you go. Eat something green.', 'Bye, love. Mind the brambles.', "Come back before dark. Or after. I'm always up."]) }]) });
+    UI.say([{ who: 'grandma', mood: 'happy', text: hello, choices }]);
   };
   UI.grandmaErrand = function () {
     const pl = errandPlan('grandma');
     const needStr = pl.e.need.map(needLabel).join(', ');
     if (pl.fakes.length && !pl.ok) {
-      // she catches the lookalikes
       removeIdx(pl.fakes.map(o => o.i));
       UI.hud();
-      UI.say([{ who: 'grandma', mood: 'open', text: FH.LINES.grandmaPoison }, { who: 'grandma', mood: 'happy', text: 'Still after: ' + needStr + '. No rush.' }], () => UI.grandmaMenu('Anything else?'));
+      UI.say([{ who: 'grandma', mood: 'wide', text: FH.LINES.grandmaPoison }, { who: 'grandma', mood: 'happy', text: 'Still after: ' + needStr + '. No rush.' }], () => UI.grandmaMenu('Anything else?'));
       return;
     }
     if (pl.ok) {
@@ -376,7 +490,7 @@
       ] }]);
       return;
     }
-    UI.say([{ who: 'grandma', mood: 'open', text: pl.e.ask }, { who: null, text: 'Errand: ' + needStr + '. You have ' + pl.progress.map(p => p.have + '/' + p.n.n).join(', ') + '.' }], () => UI.grandmaMenu('Anything else?'));
+    UI.say([{ who: 'grandma', mood: 'open', text: pl.e.ask }, { who: null, text: 'Errand: ' + needStr + '. You have ' + pl.progress.map(p => p.have + ' of ' + p.n.n).join(', ') + '.' }], () => UI.grandmaMenu('Anything else?'));
   };
   UI.grandmaVeg = function () {
     if (G.flags.giftDay === G.day) { UI.say([{ who: 'grandma', mood: 'open', text: FH.LINES.grandmaVegDone }], () => UI.grandmaMenu('Anything else?')); return; }
@@ -389,7 +503,8 @@
     sfx('harvest');
     UI.hud();
     const extra = G.player.who === 'willow' ? ' And one more, because you asked so nicely.' : '';
-    UI.say([{ who: 'grandma', mood: 'happy', text: pickLine(FH.LINES.grandmaVeg) + extra }, { who: null, text: 'You got ' + got.join(', ') + '.' }], () => UI.grandmaMenu('Anything else?'));
+    const blight = G.story.step < 7 ? ' They came out of the cold box. The garden hasn\'t given me much since the grey.' : '';
+    UI.say([{ who: 'grandma', mood: 'happy', text: pickLine(FH.LINES.grandmaVeg) + extra + blight }, { who: null, text: 'You got ' + got.join(', ') + '.' }], () => UI.grandmaMenu('Anything else?'));
   };
   UI.grandmaRest = function () {
     if (G.flags.restDay === G.day) { UI.say([{ who: 'grandma', mood: 'open', text: FH.LINES.grandmaRestDone }], () => UI.grandmaMenu('Anything else?')); return; }
@@ -401,7 +516,6 @@
         p.stam = p.maxStam;
         p.hearts = Math.min(FH.MAX_HEARTS, p.hearts + 1);
         if (evening) {
-          // sleep through to the next morning
           if (FH.hour() >= 8) G.day++;
           G.time = 0;
         } else G.time = Math.min(FH.DAY_LEN - 1, G.time + FH.DAY_LEN / 8);
@@ -421,13 +535,14 @@
     G.paused = true;
     sfx('sleep');
     setTimeout(() => {
-      mid && mid();
+      if (mid) mid();
       setTimeout(() => { f.classList.remove('on'); G.paused = UI.layers.length > 0; setTimeout(() => after && after(), 500); }, 1400);
     }, 700);
   };
 
   // ---------- Witch ----------
   UI.talkWitch = function () {
+    if (FH.story.onWitch()) return;
     if (!G.flags.metWitch) {
       G.flags.metWitch = true;
       UI.say(FH.LINES.witchFirst.map(([mood, text]) => ({ who: 'witch', mood, text })), () => UI.openWitch('trade'));
@@ -436,77 +551,92 @@
     UI.openWitch('trade');
   };
 
-  UI.openWitch = function (tab) {
-    const box = el(`<div class="layer book-layer">
-      <div class="book witch-book">
-        <div class="tabs"><button class="tab" data-t="trade">Trade</button><button class="tab" data-t="cauldron">Cauldron</button><button class="tab" data-t="errand">Errand</button><button class="tab" data-t="chat">Chat</button><button class="close" title="Close (Esc)">✕</button></div>
-        <div class="witch-head"><div class="wh-por wood"></div><div class="wh-say panel slim"></div></div>
-        <div class="pages"></div>
+  // A book-styled panel: wood frame, two paper pages, vines, ribbon, tabs on top.
+  function bookShell(opts) {
+    return el(`<div class="layer book-layer">
+      <div class="book ${opts.cls || ''}">
+        ${vines()}
+        <img class="px ribbon" src="${opts.ribbon || D().ribbonRed}" alt="">
+        <div class="book-tabs">${opts.tabs.map(t => '<button class="btab" data-t="' + t[0] + '">' + t[1] + '</button>').join('')}</div>
+        <div class="book-title plaque"></div>
+        <button class="close-x" title="Close (Esc)">✕</button>
+        ${opts.head || ''}
+        <div class="pages"><div class="page left"></div><div class="page right"></div></div>
       </div></div>`);
-    const layer = { el: box, tab: tab || 'trade', sel: 0, pot: [], roll: Math.random() };
+  }
+
+  UI.openWitch = function (tab) {
+    if (tab === 'cauldron') { FH.openCauldron(); return; }
+    const box = bookShell({
+      cls: 'witch-book', ribbon: D().ribbonGold,
+      tabs: [['trade', 'Trade'], ['errand', 'Errand'], ['chat', 'Chat'], ['cauldron', 'Cauldron ›']],
+      head: '<div class="witch-head"><div class="wh-por"></div><div class="wh-say"></div></div>',
+    });
+    const layer = { el: box, tab: tab || 'trade', sel: 0 };
     const say = (t, mood) => {
       $('.wh-say', box).textContent = t;
-      $('.wh-por', box).innerHTML = portraitImg('witch', mood || 'lidded', 2);
+      $('.wh-por', box).innerHTML = portrait('witch', mood || 'lidded');
     };
     layer.say = say;
+    const titles = { trade: 'Bottles on the Shelf', errand: "Belladonna's Errand", chat: 'Small Talk' };
     const render = () => {
-      box.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === layer.tab));
-      const pages = $('.pages', box);
-      if (layer.tab === 'trade') renderTrade(layer, pages);
-      else if (layer.tab === 'cauldron') renderCauldron(layer, pages);
-      else if (layer.tab === 'errand') renderWitchErrand(layer, pages);
-      else renderWitchChat(layer, pages);
+      box.querySelectorAll('.btab').forEach(b => b.classList.toggle('on', b.dataset.t === layer.tab));
+      $('.book-title', box).textContent = titles[layer.tab];
+      const L = $('.page.left', box), R = $('.page.right', box);
+      if (layer.tab === 'trade') renderTrade(layer, L, R);
+      else if (layer.tab === 'errand') renderWitchErrand(layer, L, R);
+      else renderWitchChat(layer, L, R);
     };
     layer.render = render;
-    const tabs = ['trade', 'cauldron', 'errand', 'chat'];
-    const setTab = (t) => { layer.tab = t; layer.sel = 0; layer.pot = []; sfx('page'); render(); };
-    box.querySelectorAll('.tab').forEach(b => { b.onclick = () => setTab(b.dataset.t); });
-    $('.close', box).onclick = () => { sfx('back'); UI.pop(layer); };
+    const tabs = ['trade', 'errand', 'chat'];
+    const setTab = (t) => {
+      if (t === 'cauldron') { UI.pop(layer); FH.openCauldron(); return; }
+      layer.tab = t; layer.sel = 0; sfx('page'); render();
+    };
+    box.querySelectorAll('.btab').forEach(b => { b.onclick = () => setTab(b.dataset.t); });
+    $('.close-x', box).onclick = () => { sfx('back'); UI.pop(layer); };
     layer.onKey = (code) => {
       if (code === 'Escape' || code === 'KeyB') { sfx('back'); UI.pop(layer); return; }
       const ti = tabs.indexOf(layer.tab);
       if (code === 'BracketLeft' || code === 'KeyQ') return setTab(tabs[(ti + tabs.length - 1) % tabs.length]);
       if (code === 'BracketRight' || code === 'Tab') return setTab(tabs[(ti + 1) % tabs.length]);
+      if (code === 'KeyC') return setTab('cauldron');
       if (layer.keys) layer.keys(code);
     };
-    say(tab === 'cauldron' ? 'Help yourself. If it explodes, it was your idea.' : pickLine(['What do you want, petal?', "Back again. I'd say I'm surprised.", 'Shop is open. Mostly.', 'Mind the cat. There is no cat. Mind it anyway.']), 'open');
+    say(pickLine(['What do you want, petal?', "Back again. I'd say I'm surprised.", 'Shop is open. Mostly.', 'Mind the cat. There is no cat. Mind it anyway.']), 'open');
     UI.push(layer);
     render();
   };
 
-  function renderTrade(layer, pages) {
+  function renderTrade(layer, L, R) {
     const trades = FH.TRADES;
     layer.sel = Math.min(layer.sel, trades.length - 1);
     const isWillow = G.player.who === 'willow';
-    pages.innerHTML = `<div class="page left"><h3 class="page-h">Bottles on the shelf</h3><div class="trade-list">${trades.map((tr, i) => {
+    L.innerHTML = `<div class="trade-list">${trades.map((tr, i) => {
       const cost = UI.discounted(tr.cost);
       const ok = !!UI.payPlan(cost);
-      return `<button class="trade-row ${i === layer.sel ? 'sel' : ''} ${ok ? '' : 'poor'}" data-i="${i}">${itemImg(tr.id, 3)}<span class="tr-name">${esc(FH.ITEMS[tr.id].name)}</span><span class="tr-cost">${isWillow ? '<s>' + costText(tr.cost) + '</s> ' : ''}${costText(cost)}</span></button>`;
-    }).join('')}</div><p class="hint">The witch takes payment from your basket, oddest things first. ${isWillow ? '<b class="willow">Willow’s Sweet Talk: one ingredient off.</b>' : ''}</p></div>
-      <div class="page right"></div>`;
-    const right = $('.page.right', pages);
+      return `<button class="trade-row ${i === layer.sel ? 'sel' : ''} ${ok ? 'ok' : 'poor'}" data-i="${i}"><span class="tr-art">${itemImg(tr.id, 3)}</span><span class="tr-name">${esc(FH.ITEMS[tr.id].name)}</span><span class="tr-cost">${isWillow ? '<s>' + costText(tr.cost) + '</s> ' : ''}${costText(cost)}</span></button>`;
+    }).join('')}</div><p class="hint">She takes payment from your basket, oddest things first.${isWillow ? ' <b class="willow">Sweet Talk: one ingredient off.</b>' : ''}</p>`;
     const detail = () => {
       const tr = trades[layer.sel];
       const d = FH.ITEMS[tr.id];
       const cost = UI.discounted(tr.cost);
       const plan = UI.payPlan(cost);
       const recommended = G.player.who === 'draco' && G.dracoAdvice().includes(d.name);
-      right.innerHTML = `<div class="detail">
-        <div class="det-top"><div class="det-icon slot big">${itemImg(tr.id, 5)}</div><div><h2>${esc(d.name)}</h2><span class="chip potion">Potion</span>${recommended ? '<span class="chip draco">Draco recommends</span>' : ''}</div></div>
-        <p class="desc">${esc(d.desc)}</p>
-        <div class="cost-box"><div class="lbl">She wants</div>${cost.map(c => {
-          const have = G.player.basket.filter(it => FH.ITEMS[it.id].tags.includes(c.tag) && FH.ITEMS[it.id].kind !== 'Potion').length;
-          return '<div class="cost-line ' + (have >= c.n ? 'ok' : '') + '"><span>' + c.n + ' ' + (c.n === 1 ? FH.SINGULAR[c.tag] : FH.TAG_NAMES[c.tag]) + '</span><b>' + Math.min(have, c.n) + '/' + c.n + '</b></div>';
-        }).join('')}</div>
-        ${plan ? '<div class="pay-preview"><div class="lbl">You would hand over</div><div class="pay-items">' + plan.map(i => { const v = FH.itemView(G.player.basket[i]); return '<span title="' + esc(v.name) + '">' + itemImg(v.sprite, 2) + '</span>'; }).join('') + '</div></div>' : ''}
-        <div class="actions"><button class="btn green" id="do-trade" ${plan ? '' : 'disabled'}>Trade <span class="kbd small">E</span></button></div>
-      </div>`;
-      $('#do-trade', right).onclick = () => doTrade();
+      R.innerHTML = `<div class="item-card">
+        <div class="ic-art kraft">${itemBig(tr.id, 4)}</div>
+        <div class="ic-text"><h2>${esc(d.name)}</h2>${flourish()}<p class="desc">${esc(d.desc)}</p>${recommended ? '<p class="note-draco">Draco recommends this one.</p>' : ''}</div>
+      </div>
+      <div class="cost-box"><div class="lbl">She wants</div>${cost.map(c => {
+        const have = G.player.basket.filter(it => FH.ITEMS[it.id].tags.includes(c.tag) && FH.ITEMS[it.id].kind !== 'Potion').length;
+        return '<div class="cost-line ' + (have >= c.n ? 'ok' : '') + '"><span>' + c.n + ' ' + (c.n === 1 ? FH.SINGULAR[c.tag] : FH.TAG_NAMES[c.tag]) + '</span><b>' + Math.min(have, c.n) + '/' + c.n + '</b></div>';
+      }).join('')}</div>
+      <div class="actions"><button class="pbtn plum" id="do-trade" ${plan ? '' : 'disabled'}>Trade</button></div>`;
+      $('#do-trade', R).onclick = () => doTrade();
     };
     const doTrade = () => {
       const tr = trades[layer.sel];
-      const cost = UI.discounted(tr.cost);
-      const plan = UI.payPlan(cost);
+      const plan = UI.payPlan(UI.discounted(tr.cost));
       if (!plan) { sfx('deny'); layer.say(FH.LINES.witchPoor, 'lidded'); return; }
       removeIdx(plan);
       G.addToBasket(tr.id);
@@ -517,8 +647,9 @@
       UI.hud();
       layer.render();
     };
-    pages.querySelectorAll('.trade-row').forEach(b => {
-      b.onclick = () => { layer.sel = +b.dataset.i; sfx('tick'); pages.querySelectorAll('.trade-row').forEach((x, k) => x.classList.toggle('sel', k === layer.sel)); detail(); };
+    const mark = () => L.querySelectorAll('.trade-row').forEach((x, k) => x.classList.toggle('sel', k === layer.sel));
+    L.querySelectorAll('.trade-row').forEach(b => {
+      b.onclick = () => { layer.sel = +b.dataset.i; sfx('tick'); mark(); detail(); };
       b.ondblclick = () => doTrade();
     });
     layer.keys = (code) => {
@@ -526,87 +657,19 @@
       else if (code === 'ArrowDown' || code === 'KeyS') layer.sel = (layer.sel + 1) % trades.length;
       else if (code === 'Enter' || code === 'KeyE' || code === 'Space') return doTrade();
       else return;
-      sfx('tick');
-      pages.querySelectorAll('.trade-row').forEach((x, k) => x.classList.toggle('sel', k === layer.sel));
-      detail();
+      sfx('tick'); mark(); detail();
     };
     detail();
   }
 
-  function renderCauldron(layer, pages) {
-    const basket = G.player.basket;
-    layer.pot = layer.pot.filter(i => i < basket.length);
-    layer.sel = Math.min(layer.sel, Math.max(0, FH.BASKET_MAX - 1));
-    const potItems = layer.pot.map(i => basket[i]);
-    const result = potItems.length === 3 ? FH.brewResult(potItems, layer.roll) : null;
-    const isDraco = G.player.who === 'draco';
-    let preview;
-    if (potItems.length < 3) preview = '<span class="muted">Three ingredients. ' + (3 - potItems.length) + ' to go.</span>';
-    else if (isDraco) {
-      const nm = FH.ITEMS[result.id].name + (result.outcome ? ' — ' + FH.MURKY[result.outcome].text.toLowerCase() : '');
-      preview = '<span class="draco-read">Draco: “That makes <b>' + esc(nm) + '</b>.”</span>';
-    } else preview = '<span class="muted">The pot gurgles. No telling what it\'ll be.</span>';
-    const known = FH.RECIPE_HINTS.filter(r => G.known[r[0]] || isDraco);
-    pages.innerHTML = `<div class="page left"><h3 class="page-h">Your basket <small>click to add or take out</small></h3>
-      <div class="slots">${slotsHTML(basket, layer.sel, layer.pot)}</div>
-      <p class="hint">Poison makes a Bitter Hex. One bad ingredient usually turns a brew murky.</p></div>
-      <div class="page right"><div class="cauldron-box">
-        <div class="pot-slots">${[0, 1, 2].map(k => { const it = potItems[k]; return '<div class="slot pot ' + (it ? 'filled' : '') + '">' + (it ? itemImg(FH.itemView(it).sprite, 3) : '') + '</div>'; }).join('<span class="plus">+</span>')}</div>
-        <div class="cauldron-art">${img(G.world.cauldron.spr.img, 5, 'cauldron')}</div>
-        <div class="preview">${preview}</div>
-        <div class="actions"><button class="btn" id="pot-clear" ${potItems.length ? '' : 'disabled'}>Empty pot</button><button class="btn plum" id="pot-brew" ${potItems.length === 3 ? '' : 'disabled'}>Brew <span class="kbd small">R</span></button></div>
-        <div class="notes"><div class="lbl">${isDraco ? 'Draco knows these by heart' : 'Your notes'}</div>${known.length ? known.map(r => '<div class="note">' + itemImg(r[0], 2) + '<b>' + FH.ITEMS[r[0]].name + '</b> ' + r[1] + '</div>').join('') : '<div class="note muted">Nothing yet. Brew something and you\'ll write it down.</div>'}</div>
-      </div></div>`;
-    const toggle = (i) => {
-      if (i >= basket.length) return;
-      const at = layer.pot.indexOf(i);
-      if (at >= 0) layer.pot.splice(at, 1);
-      else if (layer.pot.length < 3) {
-        if (FH.ITEMS[basket[i].id].kind === 'Potion') { sfx('deny'); layer.say("Potions in potions? That's how I lost my eyebrows.", 'wide'); return; }
-        layer.pot.push(i);
-      } else { sfx('deny'); return; }
-      sfx('tick');
-      renderCauldron(layer, pages);
-    };
-    const brew = () => {
-      if (layer.pot.length !== 3) return;
-      const items = layer.pot.map(i => basket[i]);
-      const res = FH.brewResult(items, layer.roll);
-      removeIdx(layer.pot.slice());
-      layer.pot = [];
-      layer.roll = Math.random();
-      const it = G.addToBasket(res.id, res.outcome ? { outcome: res.outcome } : null);
-      G.stats.brewed++;
-      if (res.id !== 'murky' && res.id !== 'hex') G.known[res.id] = true;
-      sfx('brew');
-      const v = FH.itemView(it || { id: res.id, outcome: res.outcome });
-      const lines = { hex: ['Oh, that is foul. Well done. Do not drink it.', 'wide'], murky: ['Murky. Could be anything. Isn\'t that exciting.', 'lidded'] };
-      const l = lines[res.id] || ['Look at that. A proper ' + FH.ITEMS[res.id].name + '. I might have to start charging you rent.', 'happy'];
-      layer.say(l[0], l[1]);
-      UI.toast('Brewed ' + v.name, res.id === 'hex' ? 'bad' : 'good', v.sprite);
-      UI.hud();
-      renderCauldron(layer, pages);
-    };
-    pages.querySelectorAll('.slots .slot').forEach(s => { s.onclick = () => { layer.sel = +s.dataset.i; toggle(+s.dataset.i); }; });
-    $('#pot-clear', pages).onclick = () => { layer.pot = []; sfx('back'); renderCauldron(layer, pages); };
-    $('#pot-brew', pages).onclick = brew;
-    layer.keys = (code) => {
-      const m = moveSlot(layer.sel, code);
-      if (m !== null) { layer.sel = m; sfx('tick'); renderCauldron(layer, pages); return; }
-      if (code === 'Enter' || code === 'KeyE' || code === 'Space') toggle(layer.sel);
-      else if (code === 'KeyR') brew();
-      else if (code === 'Backspace' || code === 'KeyX') { layer.pot = []; renderCauldron(layer, pages); }
-    };
-  }
-
-  function renderWitchErrand(layer, pages) {
+  function renderWitchErrand(layer, L, R) {
     const pl = errandPlan('witch');
-    pages.innerHTML = `<div class="page left"><h3 class="page-h">What she's after</h3><blockquote class="ask">“${esc(pl.e.ask)}”</blockquote>
+    L.innerHTML = `<div class="ask-note paper"><p>“${esc(pl.e.ask)}”</p></div>
       <div class="cost-box">${pl.progress.map(p => '<div class="cost-line ' + (p.have >= p.n.n ? 'ok' : '') + '"><span>' + esc(needLabel(p.n)) + '</span><b>' + p.have + '/' + p.n.n + '</b></div>').join('')}</div>
-      <p class="hint">${G.player.who === 'sage' ? 'Sage can see which things are poisonous. Handy, for once.' : "Can't tell what's poisonous? Sage could. Or an Owl's Eye."}</p></div>
-      <div class="page right"><div class="lbl center">She'll pay</div><div class="reward">${pl.e.reward.map(r => '<div class="rw">' + itemImg(r, 4) + '<span>' + FH.ITEMS[r].name + '</span></div>').join('')}</div>
-      <div class="actions"><button class="btn plum" id="give" ${pl.ok ? '' : 'disabled'}>Hand it over <span class="kbd small">E</span></button></div>
-      <p class="hint center">Errands done: ${G.stats.errands}</p></div>`;
+      <p class="hint">${G.player.who === 'sage' ? 'Sage can see which things are poisonous. Handy, for once.' : "Can't tell what's poisonous? Sage could. Or an Owl's Eye."}</p>`;
+    R.innerHTML = `<div class="lbl center">She'll pay</div><div class="reward">${pl.e.reward.map(r => '<div class="rw"><div class="kraft small">' + itemBig(r, 2) + '</div><span>' + FH.ITEMS[r].name + '</span></div>').join('')}</div>
+      <div class="actions center"><button class="pbtn plum" id="give" ${pl.ok ? '' : 'disabled'}>Hand it over</button></div>
+      <p class="hint center">Errands done so far: ${G.stats.errands}</p>`;
     const give = () => {
       const p2 = errandPlan('witch');
       if (!p2.ok) { sfx('deny'); layer.say("That's not it. Close, though. Not really.", 'lidded'); return; }
@@ -619,18 +682,18 @@
       layer.say(pickLine(FH.LINES.witchThanks), 'happy');
       got.forEach(r => UI.toast('+ ' + FH.ITEMS[r].name, 'good', r));
       UI.hud();
-      renderWitchErrand(layer, pages);
+      renderWitchErrand(layer, L, R);
     };
-    $('#give', pages).onclick = give;
+    $('#give', R).onclick = give;
+    requestAnimationFrame(() => L.querySelectorAll('.paper').forEach(n => UI.tear(n, 5)));
     layer.keys = (code) => { if (code === 'Enter' || code === 'KeyE' || code === 'Space') give(); };
   }
 
-  function renderWitchChat(layer, pages) {
-    pages.innerHTML = `<div class="page left"><h3 class="page-h">Small talk</h3><p class="desc">Belladonna is stirring something that is either soup or a curse. She seems happy to talk while she works.</p>
-      <div class="actions"><button class="btn plum" id="chat">Ask her something <span class="kbd small">E</span></button></div></div>
-      <div class="page right"><h3 class="page-h">Things she has told you</h3><div class="heard" id="heard"></div></div>`;
+  function renderWitchChat(layer, L, R) {
+    L.innerHTML = `<p class="desc">Belladonna is stirring something that is either soup or a curse. She seems happy to talk while she works.</p>
+      <div class="actions"><button class="pbtn plum" id="chat">Ask her something</button></div>`;
     G.heard = G.heard || [];
-    const paint = () => { $('#heard', pages).innerHTML = G.heard.length ? G.heard.slice(-6).map(t => '<p class="heard-line">“' + esc(t) + '”</p>').join('') : '<p class="muted">Nothing yet.</p>'; };
+    const paint = () => { R.innerHTML = '<div class="lbl">Things she has told you</div>' + (G.heard.length ? G.heard.slice(-5).map(t => '<p class="heard-line">“' + esc(t) + '”</p>').join('') : '<p class="muted">Nothing yet.</p>'); };
     const chat = () => {
       const pool = FH.LINES.witchChat.filter(t => !G.heard.includes(t));
       const t = pickLine(pool.length ? pool : FH.LINES.witchChat);
@@ -639,19 +702,18 @@
       sfx('blip');
       paint();
     };
-    $('#chat', pages).onclick = chat;
+    $('#chat', L).onclick = chat;
     layer.keys = (code) => { if (code === 'Enter' || code === 'KeyE' || code === 'Space') chat(); };
     paint();
   }
 
   // 15 basket slots in a 5x3 grid
-  function slotsHTML(basket, sel, marked) {
+  function slotsHTML(basket, sel) {
     let h = '';
     for (let i = 0; i < FH.BASKET_MAX; i++) {
       const it = basket[i];
       const v = it && FH.itemView(it);
-      const inPot = marked && marked.includes(i);
-      h += '<button class="slot ' + (i === sel ? 'sel ' : '') + (it ? 'filled ' : '') + (inPot ? 'inpot ' : '') + (v && v.toxicKnown ? 'toxic' : '') + '" data-i="' + i + '" title="' + (v ? esc(v.name) : '') + '">' +
+      h += '<button class="slot ' + (i === sel ? 'sel ' : '') + (it ? 'filled ' : '') + (v && v.toxicKnown ? 'toxic' : '') + '" data-i="' + i + '" title="' + (v ? esc(v.name) : '') + '">' +
         (it ? itemImg(v.sprite, 3) + (v.toxicKnown ? '<span class="skull">' + iconImg('skull', 2) + '</span>' : '') : '') + '</button>';
     }
     return h;
@@ -667,25 +729,23 @@
 
   // ---------- the basket book ----------
   UI.openBook = function (tab) {
-    const box = el(`<div class="layer book-layer">
-      <div class="book">
-        <div class="tabs"><button class="tab" data-t="basket">Basket</button><button class="tab" data-t="journal">Journal</button><button class="tab" data-t="status">Status</button><button class="close" title="Close (Esc)">✕</button></div>
-        <div class="pages"></div>
-      </div></div>`);
+    const box = bookShell({ tabs: [['basket', 'Basket'], ['journal', 'Journal'], ['status', 'Status']] });
     const layer = { el: box, tab: tab || 'basket', sel: 0 };
     const tabs = ['basket', 'journal', 'status'];
+    const titles = { basket: 'Your Basket', journal: 'Journal', status: FH.CHARACTERS[G.player.who].name };
     const render = () => {
-      box.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.t === layer.tab));
-      const pages = $('.pages', box);
-      if (layer.tab === 'basket') renderBasket(layer, pages);
-      else if (layer.tab === 'journal') renderJournal(layer, pages);
-      else renderStatus(layer, pages);
+      box.querySelectorAll('.btab').forEach(b => b.classList.toggle('on', b.dataset.t === layer.tab));
+      $('.book-title', box).textContent = titles[layer.tab];
+      const L = $('.page.left', box), R = $('.page.right', box);
+      if (layer.tab === 'basket') renderBasket(layer, L, R);
+      else if (layer.tab === 'journal') renderJournal(layer, L, R);
+      else renderStatus(layer, L, R);
     };
     const setTab = (t) => { layer.tab = t; sfx('page'); render(); };
-    box.querySelectorAll('.tab').forEach(b => { b.onclick = () => setTab(b.dataset.t); });
-    $('.close', box).onclick = () => { sfx('back'); UI.pop(layer); };
+    box.querySelectorAll('.btab').forEach(b => { b.onclick = () => setTab(b.dataset.t); });
+    $('.close-x', box).onclick = () => { sfx('back'); UI.pop(layer); };
     layer.onKey = (code) => {
-      if (code === 'Escape' || code === 'KeyB' || code === 'KeyI') { sfx('back'); UI.pop(layer); return; }
+      if (code === 'Escape' || code === 'KeyB' || code === 'KeyI' || code === 'KeyJ') { sfx('back'); UI.pop(layer); return; }
       const ti = tabs.indexOf(layer.tab);
       if (code === 'BracketLeft' || code === 'KeyQ') return setTab(tabs[(ti + tabs.length - 1) % tabs.length]);
       if (code === 'BracketRight' || code === 'Tab') return setTab(tabs[(ti + 1) % tabs.length]);
@@ -696,109 +756,101 @@
     render();
   };
 
-  function effectLines(it) {
+  function effectText(it) {
     const v = FH.itemView(it);
     const d = v.shownDef;
-    const out = [];
-    if (it.id === 'murky') {
-      if (v.effect) out.push(['bolt', v.effect, FH.MURKY[it.outcome].good ? 'good' : 'bad']);
-      else out.push(['bolt', 'Could be anything. Good luck.', 'unk']);
-      return out;
-    }
-    if (d.stam) out.push(['bolt', d.stam >= 999 ? 'Stamina to full' : (d.stam > 0 ? '+' : '') + d.stam + ' stamina', d.stam > 0 ? 'good' : 'bad']);
-    if (d.hp) out.push([d.hp > 0 ? 'heart' : 'heartEmpty', (d.hp > 0 ? '+' : '') + d.hp + ' heart', d.hp > 0 ? 'good' : 'bad']);
-    if (d.buff) out.push(['sparkle', d.dur + ' second effect', 'good']);
-    if (v.hidden && G.player.who !== 'sage') out.push(['skull', 'Looks fine to you.', 'unk']);
-    return out;
+    if (it.id === 'murky') return v.effect ? v.effect : 'Could do anything. Good luck.';
+    const parts = [];
+    if (d.stam >= 999) parts.push('Fills your stamina to the top.');
+    else if (d.stam > 0) parts.push('Restores ' + d.stam + ' stamina.');
+    else if (d.stam < 0) parts.push('Costs ' + (-d.stam) + ' stamina.');
+    if (d.hp > 0) parts.push('Mends ' + (d.hp === 1 ? 'a heart' : d.hp + ' hearts') + '.');
+    if (d.hp < 0) parts.push('Costs a heart.');
+    if (d.buff) parts.push('Lasts ' + d.dur + ' seconds.');
+    return parts.join(' ');
   }
 
-  function bagSummary(basket) {
-    if (!basket.length) return '';
-    const counts = {};
-    let food = 0;
-    basket.forEach(it => {
-      const v = FH.itemView(it);
-      counts[v.shownDef.kind] = (counts[v.shownDef.kind] || 0) + 1;
-      if (v.shownDef.kind !== 'Potion' && v.shownDef.stam > 0) food += v.shownDef.stam;
-    });
-    return Object.keys(counts).map(k => '<span>' + k + ' <b>' + counts[k] + '</b></span>').join('') + (food ? '<span>Food worth <b>~' + food + '</b> stamina</span>' : '');
-  }
-
-  function renderBasket(layer, pages) {
+  function renderBasket(layer, L, R) {
     const basket = G.player.basket;
     layer.sel = Math.min(layer.sel, FH.BASKET_MAX - 1);
-    pages.innerHTML = `<div class="page left"><h3 class="page-h">Basket <small>${basket.length} / ${FH.BASKET_MAX}</small></h3>
-      <div class="slots">${slotsHTML(basket, layer.sel)}</div>
-      <div class="legend"><span><b class="kbd small">E</b> eat / drink</span><span><b class="kbd small">X</b> drop</span><span><b class="kbd small">Q</b><b class="kbd small">Tab</b> pages</span></div>
-      <div class="bag-sum">${bagSummary(basket)}</div></div>
-      <div class="page right" id="det"></div>`;
-    const det = $('#det', pages);
+    L.innerHTML = `<div class="slots-board"><div class="slots">${slotsHTML(basket, layer.sel)}</div></div>
+      <div class="bag-count"><span>${basket.length} of ${FH.BASKET_MAX} spaces used</span></div>
+      <div class="legend"><span><b class="kbd small">E</b> eat or drink</span><span><b class="kbd small">X</b> drop</span><span><b class="kbd small">Tab</b> next page</span></div>`;
     const detail = () => {
       const it = basket[layer.sel];
       if (!it) {
-        det.innerHTML = '<div class="empty-det">' + iconImg('basket', 8) + '<p>' + (basket.length ? 'An empty slot. Room for one more thing.' : 'Nothing in here but crumbs. Go and find something.') + '</p></div>';
+        R.innerHTML = '<div class="empty-det"><div class="kraft">' + iconImg('basket', 8) + '</div><p>' + (basket.length ? 'An empty space. Room for one more thing.' : 'Nothing in here but crumbs. Go and find something.') + '</p></div>';
         return;
       }
       const v = FH.itemView(it);
       const isPotion = v.def.kind === 'Potion';
-      det.innerHTML = `<div class="detail">
-        <div class="det-top"><div class="det-icon slot big ${v.toxicKnown ? 'toxic' : ''}">${itemImg(v.sprite, 5)}</div><div><h2>${esc(v.name)}</h2><span class="chip">${esc(v.shownDef.kind)}</span>${v.toxicKnown ? '<span class="chip bad">Poisonous</span>' : ''}${v.toxicKnown && G.player.who === 'sage' ? '<span class="chip sage">Sage spotted it</span>' : ''}</div></div>
-        <p class="desc">${esc(v.toxicKnown && v.def.look ? FH.ITEMS[it.id].desc : v.desc)}</p>
-        <div class="effects">${effectLines(it).map(([ic, t, k]) => '<div class="eff ' + k + '">' + iconImg(ic, 2) + '<span>' + esc(t) + '</span></div>').join('')}</div>
-        <div class="actions"><button class="btn green" id="eat">${isPotion ? 'Drink' : 'Eat'} <span class="kbd small">E</span></button><button class="btn" id="drop">Drop <span class="kbd small">X</span></button></div>
-      </div>`;
-      $('#eat', det).onclick = eat;
-      $('#drop', det).onclick = drop;
+      const desc = v.toxicKnown && v.def.look ? FH.ITEMS[it.id].desc : v.desc;
+      const eff = effectText(it);
+      R.innerHTML = `<div class="item-card">
+          <div class="ic-art kraft ${v.toxicKnown ? 'toxic' : ''}">${itemBig(v.sprite, 4)}</div>
+          <div class="ic-text"><h2>${esc(v.name)}</h2>${flourish()}
+            <p class="desc">${esc(desc)}</p>
+            <p class="effect ${(v.shownDef.hp < 0 || v.shownDef.stam < 0) ? 'bad' : ''}">${esc(eff)}</p>
+            ${v.toxicKnown ? '<p class="warn-line">' + iconImg('skull', 2) + (G.player.who === 'sage' ? ' Sage spotted it: poisonous lookalike.' : ' Poisonous.') + '</p>' : ''}
+            ${v.hidden && G.player.who !== 'sage' ? '' : ''}
+          </div>
+        </div>
+        <div class="actions center"><button class="pbtn green" id="eat">${isPotion ? 'Drink' : 'Eat'}</button><button class="pbtn pink" id="drop">Drop</button></div>`;
+      $('#eat', R).onclick = eat;
+      $('#drop', R).onclick = drop;
     };
     const eat = () => {
       if (!basket[layer.sel]) return;
       G.consume(layer.sel);
       if (G.mode !== 'play') { UI.pop(layer); return; }
-      renderBasket(layer, pages);
+      renderBasket(layer, L, R);
     };
-    const drop = () => { if (!basket[layer.sel]) return; sfx('back'); G.dropItem(layer.sel); renderBasket(layer, pages); };
-    pages.querySelectorAll('.slots .slot').forEach(s => {
-      s.onclick = () => { layer.sel = +s.dataset.i; sfx('tick'); pages.querySelectorAll('.slots .slot').forEach((x, k) => x.classList.toggle('sel', k === layer.sel)); detail(); };
+    const drop = () => { if (!basket[layer.sel]) return; sfx('back'); G.dropItem(layer.sel); renderBasket(layer, L, R); };
+    const mark = () => L.querySelectorAll('.slot').forEach((x, k) => x.classList.toggle('sel', k === layer.sel));
+    L.querySelectorAll('.slot').forEach(s => {
+      s.onclick = () => { layer.sel = +s.dataset.i; sfx('tick'); mark(); detail(); };
       s.ondblclick = eat;
     });
     layer.keys = (code) => {
       const m = moveSlot(layer.sel, code);
-      if (m !== null) { layer.sel = m; sfx('tick'); pages.querySelectorAll('.slots .slot').forEach((x, k) => x.classList.toggle('sel', k === layer.sel)); detail(); return; }
+      if (m !== null) { layer.sel = m; sfx('tick'); mark(); detail(); return; }
       if (code === 'Enter' || code === 'KeyE' || code === 'Space') eat();
       else if (code === 'KeyX' || code === 'Delete' || code === 'Backspace') drop();
     };
     detail();
   }
 
-  function renderJournal(layer, pages) {
+  function renderJournal(layer, L, R) {
+    const info = FH.story.info();
+    const keys = Object.keys(G.story.keys).filter(k => G.story.keys[k] && FH.STORY.keyItems[k]);
+    const keyIcon = { letter: 'pie', lantern: 'moonlantern', fernlight: 'tonic', tonic: 'tonic' };
+    L.innerHTML = `<div class="story-note paper"><div class="sn-ch">${info.ch === '~' ? 'Epilogue' : 'Chapter ' + info.ch}</div><h3>${esc(info.title)}</h3><p>${esc(info.goal)}</p></div>
+      <div class="lbl">Keepsakes</div>
+      ${keys.length ? keys.map(k => '<div class="keepsake">' + itemImg(keyIcon[k] || 'tonic', 2) + '<div><b>' + FH.STORY.keyItems[k].name + '</b><span>' + esc(FH.STORY.keyItems[k].desc) + '</span></div></div>').join('') : '<p class="muted">Nothing yet.</p>'}`;
     const g = errandPlan('grandma'), w = errandPlan('witch');
-    const errandCard = (who, pl, name) => `<div class="errand ${who}"><div class="er-head">${portraitImg(who, 'happy', 1, 'mini')}<b>${name}</b></div><p class="ask">“${esc(pl.e.ask)}”</p>${pl.progress.map(p => '<div class="cost-line ' + (p.have >= p.n.n ? 'ok' : '') + '"><span>' + esc(needLabel(p.n)) + '</span><b>' + p.have + '/' + p.n.n + '</b></div>').join('')}</div>`;
+    const errandCard = (who, pl, name) => `<div class="errand"><div class="er-head">${portrait(who, 'happy', 'mini')}<b>${name}</b></div><p class="ask">“${esc(pl.e.ask)}”</p>${pl.progress.map(p => '<div class="cost-line ' + (p.have >= p.n.n ? 'ok' : '') + '"><span>' + esc(needLabel(p.n)) + '</span><b>' + p.have + '/' + p.n.n + '</b></div>').join('')}</div>`;
     const tips = [
-      ['strawberry', 'Meadow: strawberries, bilberries, crab apples, chanterelles and fiddleheads.'],
+      ['strawberry', 'Meadow: strawberries, bilberries, crab apples, chanterelles, fiddleheads.'],
       ['nightberry', 'Dark Wood: nightberries, glowcaps and moonleaf. Wisps and brambles too.'],
-      ['jack', 'Some forage has a poisonous twin. Sage can tell them apart. Jack-o\'-lanterns glow faintly at night.'],
-      ['carrot', 'Grandma\'s garden regrows. She hands out vegetables once a day, and lets you nap once a day.'],
-      ['hearttonic', 'Hearts only come back from potions, pie, and a rest at Grandma\'s.'],
+      ['chanterelle', "Three kinds of forage have poisonous twins. Sage can tell. Jack-o'-lanterns glow faintly at night."],
+      ['hearttonic', 'Hearts come back from potions, pie, and a rest at Hazel\'s.'],
     ];
-    pages.innerHTML = `<div class="page left"><h3 class="page-h">Errands</h3>
-      ${G.flags.metGrandma ? errandCard('grandma', g, 'Grandma Hazel') : '<p class="muted">Someone lives in the cottage to the east. Smoke from the chimney, so they\'re home.</p>'}
-      ${G.flags.metWitch ? errandCard('witch', w, 'Belladonna') : '<p class="muted">The sign by the crossroads points west to a "Den". Brave or hungry people only.</p>'}
-      </div>
-      <div class="page right"><h3 class="page-h">Field notes</h3>${tips.map(t => '<div class="note">' + itemImg(t[0], 2) + '<span>' + esc(t[1]) + '</span></div>').join('')}</div>`;
+    R.innerHTML = (G.story.step >= 2 ? '<div class="lbl">Errands</div>' + errandCard('grandma', g, 'Grandma Hazel') + (G.flags.metWitch ? errandCard('witch', w, 'Belladonna') : '') : '') +
+      '<div class="lbl">Field notes</div>' + tips.map(t => '<div class="note">' + itemImg(t[0], 2) + '<span>' + esc(t[1]) + '</span></div>').join('');
+    requestAnimationFrame(() => L.querySelectorAll('.paper').forEach(n => UI.tear(n, 5)));
     layer.keys = null;
   }
 
-  function renderStatus(layer, pages) {
+  function renderStatus(layer, L, R) {
     const p = G.player, c = FH.CHARACTERS[p.who];
-    pages.innerHTML = `<div class="page left status-left"><div class="big-por wood">${portraitImg(p.who, 'open', 5)}</div><h2>${c.name} <small>${c.title}</small></h2><p class="desc">${esc(c.blurb)}</p></div>
-      <div class="page right">
-        <div class="abil"><div class="lbl">Ability · <span class="kbd small">Q</span></div><b>${esc(c.ability.name)}</b><p>${esc(c.ability.text)}</p></div>
-        <div class="abil"><div class="lbl">Passive</div><b>${esc(c.passive.name)}</b><p>${esc(c.passive.text)}</p></div>
-        <div class="stats">
-          <div><span>Day</span><b>${G.day}</b></div><div><span>Things gathered</span><b>${G.stats.gathered}</b></div>
-          <div><span>Eaten & drunk</span><b>${G.stats.eaten}</b></div><div><span>Potions brewed</span><b>${G.stats.brewed}</b></div>
-          <div><span>Trades</span><b>${G.stats.traded}</b></div><div><span>Errands done</span><b>${G.stats.errands}</b></div>
-        </div>
+    L.innerHTML = `<div class="status-left"><div class="big-por">${portrait(p.who, 'open')}</div><h2>${c.name}</h2><div class="subtitle">${c.title}</div><p class="desc">${esc(c.blurb)}</p></div>`;
+    R.innerHTML = `
+      <div class="abil"><div class="lbl">Ability · press Q</div><b>${esc(c.ability.name)}</b><p>${esc(c.ability.text)}</p></div>
+      <div class="abil"><div class="lbl">Passive</div><b>${esc(c.passive.name)}</b><p>${esc(c.passive.text)}</p></div>
+      <div class="stats">
+        <div><span>Day</span><b>${G.day}</b></div><div><span>Gathered</span><b>${G.stats.gathered}</b></div>
+        <div><span>Eaten</span><b>${G.stats.eaten}</b></div><div><span>Brewed</span><b>${G.stats.brewed}</b></div>
+        <div><span>Trades</span><b>${G.stats.traded}</b></div><div><span>Errands</span><b>${G.stats.errands}</b></div>
       </div>`;
     layer.keys = null;
   }
@@ -810,17 +862,24 @@
     const hasSave = G.hasSave();
     const box = el(`<div class="layer title-layer">
       <div class="title-wrap">
-        <div class="logo"><div class="logo-small">a little forest game</div><h1><span>Fernlight</span><span>Hollow</span></h1><div class="logo-leaves">${itemImg('moonleaf', 3)}${itemImg('strawberry', 3)}${itemImg('glowcap', 3)}</div></div>
-        <div class="menu">
-          ${hasSave ? '<button class="btn wood-btn" data-a="continue">Continue</button>' : ''}
-          <button class="btn wood-btn" data-a="new">New game</button>
-          <button class="btn wood-btn" data-a="help">How to play</button>
-          <button class="btn wood-btn small" data-a="sound">Music: <b>${FH.audio.musicOn ? 'on' : 'off'}</b></button>
+        <div class="logo">
+          ${vines()}
+          <div class="logo-board">
+            <div class="logo-small">a cozy forest story</div>
+            <h1>Fernlight Hollow</h1>
+            ${flourish()}
+          </div>
         </div>
-        <div class="title-foot">No ending. Stay as long as you like.</div>
-      </div></div>`);
+        <div class="menu">
+          ${hasSave ? '<button class="wbtn" data-a="continue">Continue</button>' : ''}
+          <button class="wbtn" data-a="new">New game</button>
+          <button class="wbtn" data-a="help">How to play</button>
+          <button class="wbtn small" data-a="sound">Music: <b>${FH.audio.musicOn ? 'on' : 'off'}</b></button>
+        </div>
+      </div>
+      <div class="title-foot">Forage, brew, and bring the colour back to Hazel's garden.</div></div>`);
     const layer = { el: box, sel: 0 };
-    const btns = () => Array.from(box.querySelectorAll('.menu .btn'));
+    const btns = () => Array.from(box.querySelectorAll('.menu .wbtn'));
     const mark = () => btns().forEach((b, i) => b.classList.toggle('sel', i === layer.sel));
     const act = (a) => {
       FH.audio.start();
@@ -845,23 +904,24 @@
   };
 
   UI.help = function () {
-    const box = el(`<div class="layer modal-layer"><div class="modal panel">
-      <h2>How to play</h2>
-      <div class="help-grid">
-        <div><span class="kbd">WASD</span><span class="kbd">← ↑ → ↓</span></div><p>Walk. Hold <span class="kbd small">Shift</span> to run, which eats stamina faster.</p>
-        <div><span class="kbd">E</span><span class="kbd">Space</span></div><p>Pick things up, harvest, talk, read signs.</p>
-        <div><span class="kbd">B</span></div><p>Open your basket. It holds 15 things. Eat, drink or drop from here.</p>
-        <div><span class="kbd">Q</span></div><p>Use your character's ability.</p>
-        <div><span class="kbd">Esc</span></div><p>Pause.</p>
+    const box = el(`<div class="layer modal-layer"><div class="modal">
+      <div class="modal-title plaque">How to Play</div>
+      <div class="modal-body">
+        <div class="help-grid">
+          <div><span class="kbd">WASD</span><span class="kbd">← ↑ → ↓</span></div><p>Walk. Hold <span class="kbd small">Shift</span> to run, which uses stamina faster.</p>
+          <div><span class="kbd">E</span><span class="kbd">Space</span></div><p>Pick things up, harvest, talk, read.</p>
+          <div><span class="kbd">B</span><span class="kbd">J</span></div><p>Basket (15 spaces) and Journal. The gold arrow points to your next goal.</p>
+          <div><span class="kbd">Q</span></div><p>Your character's ability.</p>
+          <div><span class="kbd">Esc</span></div><p>Pause.</p>
+        </div>
+        <ul class="help-list">
+          <li>${iconImg('heart', 2)}<span>You have <b>three hearts</b>. Lose them all and you start over.</span></li>
+          <li>${iconImg('bolt', 2)}<span><b>Stamina</b> drains as you walk. At zero you slow down and lose hearts. Eat.</span></li>
+          <li>${iconImg('skull', 2)}<span>Some berries and mushrooms are <b>poisonous lookalikes</b>.</span></li>
+          <li>${itemImg('carrot', 2)}<span><b>Grandma Hazel</b> lives east. <b>Belladonna</b> brews potions in the Dark Wood, west.</span></li>
+        </ul>
       </div>
-      <ul class="help-list">
-        <li>${iconImg('heart', 2)}<span>You have <b>three hearts</b>. Lose them all and you start over.</span></li>
-        <li>${iconImg('bolt', 2)}<span><b>Stamina</b> drains as you walk. At zero you slow down and start losing hearts. Eat.</span></li>
-        <li>${iconImg('skull', 2)}<span>Some berries and mushrooms are <b>poisonous lookalikes</b>. Eating one costs a heart.</span></li>
-        <li>${itemImg('carrot', 2)}<span><b>Grandma Hazel</b> (east) grows vegetables, gives errands and lets you rest.</span></li>
-        <li>${itemImg('hearttonic', 2)}<span><b>Belladonna</b> (west, in the Dark Wood) trades potions for food. Or brew your own.</span></li>
-      </ul>
-      <div class="actions center"><button class="btn green" id="ok">Got it</button></div>
+      <div class="actions center"><button class="pbtn green" id="ok">Got it</button></div>
     </div></div>`);
     const layer = { el: box };
     $('#ok', box).onclick = () => { sfx('back'); UI.pop(layer); };
@@ -873,19 +933,20 @@
     G.mode = 'select';
     const order = ['draco', 'sage', 'willow'];
     const box = el(`<div class="layer select-layer">
-      <h2 class="select-h">Who's walking into the woods?</h2>
+      <div class="select-h plaque">Who walks into the woods?</div>
       <div class="cards">${order.map(id => {
         const c = FH.CHARACTERS[id];
-        const bar = (v, max) => '<div class="sbar"><i style="width:' + Math.round(v / max * 100) + '%"></i></div>';
-        return `<button class="card panel" data-id="${id}">
-          <div class="card-por wood">${portraitImg(id, 'open', 4, 'p-open')}${portraitImg(id, 'happy', 4, 'p-happy')}</div>
-          <div class="card-walk">${img(FH.charSprite(id, 'down', 0), 3, 'walk-' + id)}</div>
-          <h3>${c.name}</h3><div class="card-title">${c.title}</div>
-          <p class="blurb">${esc(c.blurb)}</p>
-          <div class="statrow"><span>Stamina</span>${bar(c.maxStam, 120)}</div>
-          <div class="statrow"><span>Speed</span>${bar(c.speed, 1.15)}</div>
-          <div class="abil"><div class="lbl">Ability · Q</div><b>${esc(c.ability.name)}</b><p>${esc(c.ability.text)}</p></div>
-          <div class="abil"><div class="lbl">Passive</div><b>${esc(c.passive.name)}</b><p>${esc(c.passive.text)}</p></div>
+        const pips = (v, max) => { let s = ''; for (let k = 0; k < 5; k++) s += '<i class="' + (k < Math.round(v / max * 5) ? 'on' : '') + '"></i>'; return '<span class="pips">' + s + '</span>'; };
+        return `<button class="card" data-id="${id}">
+          <div class="card-frame">${portrait(id, 'open')}<div class="card-walk">${img(FH.charSprite(id, 'down', 0), 3, 'walk-' + id)}</div></div>
+          <div class="card-body">
+            <h3>${c.name}</h3><div class="subtitle">${c.title}</div>
+            <p class="blurb">${esc(c.blurb)}</p>
+            <div class="statrow"><span>Stamina</span>${pips(c.maxStam, 120)}</div>
+            <div class="statrow"><span>Speed</span>${pips(c.speed, 1.1)}</div>
+            <div class="abil"><div class="lbl">Ability · Q</div><b>${esc(c.ability.name)}</b><p>${esc(c.ability.text)}</p></div>
+            <div class="abil"><div class="lbl">Passive</div><b>${esc(c.passive.name)}</b><p>${esc(c.passive.text)}</p></div>
+          </div>
         </button>`;
       }).join('')}</div>
       <div class="select-foot"><span class="kbd">←</span><span class="kbd">→</span> choose · <span class="kbd">Enter</span> begin · <span class="kbd">Esc</span> back</div>
@@ -902,7 +963,6 @@
     };
     cards.forEach((c, i) => {
       c.onclick = () => { if (layer.sel === i) go(); else { layer.sel = i; sfx('tick'); mark(); } };
-      c.ondblclick = go;
       c.onmouseenter = () => { if (layer.sel !== i) { layer.sel = i; sfx('tick'); mark(); } };
     });
     layer.onKey = (code) => {
@@ -921,35 +981,28 @@
     UI.resetHudCache();
     $('#hud').classList.remove('hidden');
     UI.buildHud();
-    UI.hud();
-    const p = G.player;
+    UI.hud(true);
     if (resumed) {
       UI.toast('Welcome back. Day ' + G.day + ', ' + FH.clockText() + '.', 'good');
       return;
     }
-    const intro = FH.LINES.start[p.who];
-    UI.say([
-      { who: null, text: 'Fernlight Hollow. A forest that is never in any hurry, and would prefer you weren\'t either.' },
-      { who: p.who, mood: 'open', text: intro[0] },
-      { who: p.who, mood: 'happy', text: intro[1] },
-      { who: null, text: 'Your basket holds fifteen things. Keep your stamina up, keep your three hearts, and don\'t eat anything that looks too pleased with itself.' },
-    ]);
+    FH.story.prologue();
   };
 
   UI.pause = function () {
-    const box = el(`<div class="layer modal-layer"><div class="modal panel pause">
-      <h2>Paused</h2>
+    const box = el(`<div class="layer modal-layer"><div class="modal pause">
+      <div class="modal-title plaque">Paused</div>
       <div class="menu">
-        <button class="btn wood-btn" data-a="resume">Resume</button>
-        <button class="btn wood-btn" data-a="help">How to play</button>
-        <button class="btn wood-btn small" data-a="music">Music: <b>${FH.audio.musicOn ? 'on' : 'off'}</b></button>
-        <button class="btn wood-btn small" data-a="sfx">Sounds: <b>${FH.audio.sfxOn ? 'on' : 'off'}</b></button>
-        <button class="btn wood-btn small" data-a="quit">Save &amp; quit to title</button>
+        <button class="wbtn" data-a="resume">Resume</button>
+        <button class="wbtn" data-a="help">How to play</button>
+        <button class="wbtn small" data-a="music">Music: <b>${FH.audio.musicOn ? 'on' : 'off'}</b></button>
+        <button class="wbtn small" data-a="sfx">Sounds: <b>${FH.audio.sfxOn ? 'on' : 'off'}</b></button>
+        <button class="wbtn small" data-a="quit">Save and quit</button>
       </div>
-      <p class="hint center">Your game saves itself every so often, and when you close a menu.</p>
+      <p class="hint center">The game saves itself as you play.</p>
     </div></div>`);
     const layer = { el: box, sel: 0 };
-    const btns = () => Array.from(box.querySelectorAll('.menu .btn'));
+    const btns = () => Array.from(box.querySelectorAll('.menu .wbtn'));
     const mark = () => btns().forEach((b, i) => b.classList.toggle('sel', i === layer.sel));
     const act = (a) => {
       sfx('select');
@@ -981,17 +1034,17 @@
     }[cause] || 'The forest goes quiet.';
     const p = G.player;
     const box = el(`<div class="layer over-layer"><div class="over">
-      <div class="over-por">${portraitImg(p.who, 'happy', 4)}</div>
+      <div class="over-por">${portrait(p.who, 'open')}</div>
       <h2>The forest goes quiet.</h2>
       <p class="why">${esc(why)}</p>
-      <p class="sub">You wake at the edge of the meadow with an empty basket and a headache. Grandma will have heard about this.</p>
+      <p class="sub">You wake at the edge of the meadow with an empty basket and a headache. Hazel will have heard about this.</p>
       <div class="stats">
         <div><span>Days</span><b>${G.day}</b></div><div><span>Gathered</span><b>${G.stats.gathered}</b></div><div><span>Brewed</span><b>${G.stats.brewed}</b></div><div><span>Errands</span><b>${G.stats.errands}</b></div>
       </div>
-      <div class="menu row"><button class="btn green" data-a="again">Start over</button><button class="btn" data-a="title">Title</button></div>
+      <div class="menu row"><button class="pbtn green" data-a="again">Start over</button><button class="pbtn" data-a="title">Title</button></div>
     </div></div>`);
     const layer = { el: box, sel: 0 };
-    const btns = Array.from(box.querySelectorAll('.btn'));
+    const btns = Array.from(box.querySelectorAll('.pbtn'));
     const mark = () => btns.forEach((b, i) => b.classList.toggle('sel', i === layer.sel));
     const act = (a) => { sfx('select'); if (a === 'again') { UI.pop(layer); $('#hud').classList.add('hidden'); UI.select(); } else UI.title(); };
     btns.forEach((b, i) => { b.onclick = () => act(b.dataset.a); b.onmouseenter = () => { layer.sel = i; mark(); }; });

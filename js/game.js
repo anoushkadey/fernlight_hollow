@@ -83,7 +83,7 @@
 
   G.resize = function () {
     const iw = window.innerWidth, ih = window.innerHeight;
-    let s = Math.floor(Math.min(iw / 380, ih / 214));
+    let s = Math.floor(Math.min(iw / 300, ih / 170));
     s = Math.max(2, s);
     if (iw < 500) s = 2;
     G.scale = s;
@@ -109,6 +109,7 @@
     G.flags = { metGrandma: false, metWitch: false, sawDark: false, saidNight: -1, giftDay: 0, restDay: 0, hungryBark: 0 };
     G.errands = { grandma: Math.floor(rand() * FH.ERRANDS.grandma.length), witch: Math.floor(rand() * FH.ERRANDS.witch.length) };
     G.known = {};
+    G.story = { step: 0, keys: {}, picked: false };
     G.drops = []; G.particles = []; G.pings = [];
     G.world.spawns.forEach(s => { s.item = null; s.timer = rand() * 3; });
     G.world.crops.forEach(c2 => { c2.growth = 0.4 + rand() * 0.7; });
@@ -136,7 +137,7 @@
     const p = G.player;
     const data = {
       who: p.who, x: p.x, y: p.y, stam: p.stam, hearts: p.hearts, basket: p.basket, buffs: p.buffs,
-      time: G.time, day: G.day, stats: G.stats, flags: G.flags, errands: G.errands, known: G.known,
+      time: G.time, day: G.day, stats: G.stats, flags: G.flags, errands: G.errands, known: G.known, story: G.story,
       crops: G.world.crops.map(c => c.growth),
     };
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
@@ -158,6 +159,7 @@
     Object.assign(G.flags, d.flags || {});
     Object.assign(G.errands, d.errands || {});
     G.known = d.known || {};
+    if (d.story) G.story = Object.assign({ step: 0, keys: {} }, d.story);
     (d.crops || []).forEach((g, i) => { if (G.world.crops[i]) G.world.crops[i].growth = g; });
     G.snapCamera();
     return true;
@@ -354,6 +356,8 @@
     G.npcs.forEach(n => consider(n.x, n.y - 6, { kind: 'npc', ref: n, label: 'Talk to ' + n.name }, 28));
     const cd = G.world.cauldron;
     consider(cd.x, cd.y - 6, { kind: 'cauldron', label: 'Use the cauldron' }, 26);
+    const fl = G.world.fernlight;
+    if (!G.story.picked || G.story.step >= 7) consider(fl.x, fl.y - 4, { kind: 'fernlight', ref: fl, label: FH.isNight() && G.story.step === 4 ? 'Pick the Fernlight' : 'Look at the bud' }, 26);
     G.world.props.forEach(pr => { if (pr.type === 'sign') consider(pr.x, pr.y - 6, { kind: 'sign', ref: pr, label: 'Read the sign' }, 24); });
     return best;
   };
@@ -392,6 +396,8 @@
       else FH.ui.talkWitch();
     } else if (it.kind === 'cauldron') {
       FH.ui.openWitch('cauldron');
+    } else if (it.kind === 'fernlight') {
+      FH.story.fernlight();
     } else if (it.kind === 'sign') {
       FH.ui.say([{ who: null, text: 'The sign has two arrows. West: "Dark Wood. Belladonna\'s Den. Mind the brambles." East: "Hazel\'s. Wipe your boots."' }]);
     }
@@ -633,11 +639,15 @@
       if (!inView(cr.x, cr.y, 20)) return;
       const stage = cr.growth >= 1 ? 2 : cr.growth > 0.45 ? 1 : 0;
       cr.sprs = cr.sprs || [0, 1, 2].map(s => FH.makeCrop(cr.kind, s));
-      draws.push({ y: cr.y - 2, kind: 'crop', cr, spr: cr.sprs[stage], ripe: stage === 2 });
+      cr.grey = cr.grey || cr.sprs.map(sp => ({ img: FH.grey(sp.img, 0.85), ox: sp.ox, oy: sp.oy }));
+      const blight = G.story && G.story.step < 7;
+      draws.push({ y: cr.y - 2, kind: 'crop', cr, spr: (blight ? cr.grey : cr.sprs)[stage], ripe: stage === 2 });
     });
     G.world.spawns.forEach(s => { if (s.item && inView(s.x, s.y, 20)) draws.push({ y: s.y, kind: 'item', s, id: s.item }); });
     G.drops.forEach(d => { if (inView(d.x, d.y, 20)) draws.push({ y: d.y, kind: 'drop', d }); });
     if (G.npcs) G.npcs.forEach(n => draws.push({ y: n.y, kind: 'npc', n }));
+    const fl = G.world.fernlight;
+    if (inView(fl.x, fl.y, 40) && (!G.story || !G.story.picked || G.story.step >= 7)) draws.push({ y: fl.y, kind: 'fern' });
     if (G.mode === 'play' || G.mode === 'over') draws.push({ y: G.player.y, kind: 'player' });
     draws.sort((a, b) => a.y - b.y);
 
@@ -705,6 +715,14 @@
         }
       } else if (d.kind === 'player') {
         drawPlayer(g, cx, cy, shadow);
+      } else if (d.kind === 'fern') {
+        const open = FH.isNight();
+        G.fernSpr = G.fernSpr || [FH.makeFernlight(false), FH.makeFernlight(true)];
+        const sp = G.fernSpr[open ? 1 : 0];
+        const fl = G.world.fernlight;
+        shadow(fl.x, fl.y, 14);
+        g.drawImage(sp.img, Math.round(fl.x - sp.ox - cx), Math.round(fl.y - sp.oy - cy + (open ? Math.round(Math.sin(t * 2)) : 0)));
+        if (open && Math.random() < 0.15) G.particles.push({ x: fl.x + (Math.random() - 0.5) * 16, y: fl.y - 18, vx: (Math.random() - 0.5) * 6, vy: -8, life: 1.6, col: '#bff6ff', size: 1, glow: true });
       }
     }
 
@@ -767,6 +785,21 @@
         g.fillRect(x - 1, by, 3, 3); g.fillRect(x, by + 3, 1, 2);
       }
     });
+
+    // compass toward the current objective
+    if (G.mode === 'play' && !G.paused && FH.story) {
+      const tg = FH.story.target();
+      if (tg && Math.hypot(tg.x - p.x, tg.y - p.y) > 70) {
+        const ang = Math.atan2(tg.y - p.y, tg.x - p.x);
+        const R = 26 + Math.sin(G.t * 4) * 2;
+        const ax = Math.round(p.x - cx + Math.cos(ang) * R), ay = Math.round(p.y - 9 - cy + Math.sin(ang) * R);
+        g.save();
+        g.translate(ax, ay); g.rotate(ang);
+        g.fillStyle = '#24140a'; g.beginPath(); g.moveTo(6, 0); g.lineTo(-4, -5); g.lineTo(-2, 0); g.lineTo(-4, 5); g.closePath(); g.fill();
+        g.fillStyle = '#ffd86a'; g.beginPath(); g.moveTo(4, 0); g.lineTo(-2, -3); g.lineTo(-1, 0); g.lineTo(-2, 3); g.closePath(); g.fill();
+        g.restore();
+      }
+    }
 
     // vignette when hurt or low
     if (G.mode === 'play') {
@@ -837,10 +870,16 @@
     });
     if (p && (G.mode === 'play' || G.mode === 'over')) {
       const owl = p.buffs.owl > 0;
-      const r = owl ? 150 : 46 + night * 10;
+      const r = owl ? 150 : (G.story && G.story.keys.lantern ? 78 : 46) + night * 10;
       hole(p.x - cx, p.y - 12 - cy, r * flick(99), owl ? 0.95 : 0.85);
       glows.push([p.x - cx, p.y - 12 - cy, 30, '255,220,150', 0.12 * night]);
     }
+    if (G.world.fernlight && FH.isNight() && (!G.story || !G.story.picked || G.story.step >= 7)) {
+      const fl = G.world.fernlight;
+      hole(fl.x - cx, fl.y - 14 - cy, 60, 0.9);
+      glows.push([fl.x - cx, fl.y - 14 - cy, 40, '160,240,255', 0.5]);
+    }
+    if (p && G.story && G.story.keys.lantern && night > 0.3) glows.push([p.x - cx + 6, p.y - 12 - cy, 22, '127,200,255', 0.35]);
     G.wisps.forEach(w => {
       if (w.alpha < 0.1) return;
       hole(w.x - cx, w.y - cy, 26, 0.8 * w.alpha);
@@ -874,6 +913,7 @@
   G.zoneName = function () {
     const p = G.player, L = FH.LANDMARKS;
     const tx = p.x / T, ty = p.y / T;
+    if (Math.hypot(tx - L.glade.x, ty - L.glade.y) < 6) return 'The Old Glade';
     if (Math.hypot(tx - L.den.x, ty - L.den.y) < 8) return "Belladonna's Den";
     if (Math.hypot(tx - (L.cottage.x - 3), ty - (L.cottage.y + 5)) < 11) return "Hazel's Garden";
     if (G.world.darkAt(p.x, p.y) > 0.5) return 'The Dark Wood';

@@ -445,6 +445,85 @@
     return { img: b.canvas(), ox: 7, oy: 13 };
   };
 
+  FH.makeStone = function (seed) {
+    const r = rng(seed * 41 + 2);
+    const b = new Buf(14, 26);
+    const lv = ['#1d1a2e', '#2e2a44', '#45405e', '#615b7c'];
+    for (let y = 2; y < 25; y++) {
+      const half = 4 + (y > 20 ? 1 : 0) - (y < 5 ? (5 - y) * 0.6 : 0);
+      for (let x = Math.round(7 - half); x <= Math.round(6 + half); x++) {
+        const t = (x - (7 - half)) / (half * 2);
+        let l = 0.75 - t * 0.6 + (r() - 0.5) * 0.15;
+        if (y > 18 && r() < 0.35) { b.set(x, y, r() < 0.5 ? '#2d4a40' : '#3f6a52'); continue; }
+        b.set(x, y, lv[Math.max(0, Math.min(3, Math.floor(l * 4)))]);
+      }
+    }
+    // a rune that glows faintly
+    [[6, 9], [6, 10], [6, 11], [7, 10], [5, 12], [7, 12], [6, 13]].forEach(([x, y]) => b.set(x, y, '#7fe6f0'));
+    b.outline('#07040c');
+    return { img: b.canvas(), ox: 7, oy: 25 };
+  };
+
+  FH.makeGlowShrooms = function () {
+    const b = new Buf(14, 10);
+    [[3, 6, 1], [8, 4, 2], [11, 7, 1]].forEach(([x, y, big]) => {
+      b.rect(x, y, 1, big ? 4 : 3, '#d8e8f0');
+      if (big === 2) { b.rect(x - 2, y - 1, 5, 1, '#7fe6f0'); b.rect(x - 1, y - 2, 3, 1, '#bff6ff'); b.set(x - 1, y - 2, '#e8ffff'); b.rect(x - 2, y, 5, 1, '#3aa6c0'); }
+      else { b.rect(x - 1, y - 1, 3, 1, '#7fe6f0'); b.set(x, y - 2, '#bff6ff'); }
+    });
+    b.outline('#0a1420');
+    return { img: b.canvas(), ox: 7, oy: 9 };
+  };
+
+  // The fernlight: fern fronds around a bell-shaped bloom. Closed by day.
+  FH.makeFernlight = function (open) {
+    const b = new Buf(26, 30);
+    const fr = ['#1f3d2a', '#2f5a36', '#4a7a44', '#6f9a58'];
+    const frond = (x0, y0, dir, len) => {
+      for (let i = 0; i < len; i++) {
+        const x = x0 + dir * i, y = Math.round(y0 - Math.sin(i / len * 2.2) * 6);
+        b.set(x, y, fr[1]);
+        if (i % 2 === 0 && i < len - 1) { b.set(x, y - 1, fr[3]); b.set(x, y + 1, fr[2]); }
+      }
+    };
+    frond(12, 26, -1, 11); frond(13, 26, 1, 11); frond(12, 24, -1, 8); frond(13, 24, 1, 8);
+    b.rect(12, 14, 2, 13, fr[1]); b.set(12, 14, fr[3]);
+    if (open) {
+      const pet = ['#e8fff8', '#bff6ff', '#7fe6f0', '#3aa6c0'];
+      for (let y = 0; y < 12; y++) {
+        const half = y < 2 ? 2 : y < 8 ? 3 + Math.floor(y / 2) : 6 - (y - 8);
+        for (let x = -half; x <= half; x++) {
+          const l = 0.85 - Math.abs(x) / (half + 1) * 0.6 - y / 24;
+          b.set(13 + x, 3 + y, pet[Math.max(0, Math.min(3, 3 - Math.floor(l * 4)))]);
+        }
+      }
+      b.rect(12, 9, 2, 3, '#fff8d8'); b.set(12, 8, '#ffffff');
+      [[6, 13], [19, 12], [7, 6], [18, 5]].forEach(([x, y]) => b.set(x, y, '#e8fff8'));
+    } else {
+      for (let y = 0; y < 8; y++) {
+        const half = y < 2 ? 1 : 2;
+        for (let x = -half; x <= half; x++) b.set(13 + x, 6 + y, x < 0 ? '#9ab8b0' : '#6a8a84');
+      }
+    }
+    b.outline('#0a1410');
+    return { img: b.canvas(), ox: 13, oy: 28 };
+  };
+
+  // Desaturated copy, used for the blighted garden.
+  FH.grey = function (canvas, amt) {
+    const c = document.createElement('canvas');
+    c.width = canvas.width; c.height = canvas.height;
+    const g = c.getContext('2d');
+    g.drawImage(canvas, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const l = d.data[i] * 0.3 + d.data[i + 1] * 0.55 + d.data[i + 2] * 0.15;
+      d.data[i] += (l * 0.9 - d.data[i]) * amt; d.data[i + 1] += (l * 0.9 - d.data[i + 1]) * amt; d.data[i + 2] += (l - d.data[i + 2]) * amt;
+    }
+    g.putImageData(d, 0, 0);
+    return c;
+  };
+
   FH.makeLog = function () {
     const b = new Buf(26, 10);
     b.rect(2, 2, 21, 6, '#6b4428'); b.rect(2, 2, 21, 2, '#8a5c34'); b.rect(2, 7, 21, 1, '#4a2f1f');

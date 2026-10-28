@@ -32,6 +32,7 @@
     garden: { x: 64, y: 27, w: 9, h: 5 },
     pond: { x: 52, y: 47, rx: 5.5, ry: 3.6 },
     den: { x: 14, y: 17 },
+    glade: { x: 8, y: 7 },
   };
   FH.LANDMARKS = L;
 
@@ -104,6 +105,9 @@
     addPath([{ x: 46, y: 39 }, { x: 52, y: 35.5 }, { x: 58, y: 33.5 }, { x: 63, y: 34.6 }, { x: 68, y: 34.2 }, { x: 74.6, y: 32 }, { x: 75, y: 27 }, { x: 72.5, y: 23.6 }], 10);
     addPath([{ x: 46, y: 39 }, { x: 40, y: 36 }, { x: 33, y: 32 }, { x: 26, y: 27 }, { x: 20, y: 22 }, { x: 15, y: 19 }], 10);
     addPath([{ x: 46, y: 39 }, { x: 47, y: 46 }, { x: 45, y: 53 }, { x: 42, y: 60 }], 7);
+    // a faint deer trail from the den up to the Old Glade
+    this.gladeTrail = [{ x: 12, y: 19 }, { x: 10, y: 15.5 }, { x: 8.5, y: 12 }, { x: 8, y: 9 }];
+    addPath(this.gladeTrail, 4);
     for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
       if (this.pathDist(x * T + 8, y * T + 8) < 3) this.tiles[this.idx(x, y)] = this.dark[this.idx(x, y)] > 0.5 ? 5 : 1;
     }
@@ -130,6 +134,7 @@
     reserve(G.x - 2, G.y - 2, G.x + G.w + 1, G.y + G.h + 1);
     reserve(L.den.x - 6, L.den.y - 6, L.den.x + 6, L.den.y + 5);
     reserve(L.start.x - 3, L.start.y - 3, L.start.x + 3, L.start.y + 3);
+    reserve(L.glade.x - 4, L.glade.y - 3, L.glade.x + 4, L.glade.y + 3);
     for (let i = 0; i < MW * MH; i++) if (this.tiles[i] === 1 || this.tiles[i] === 2 || this.tiles[i] === 3 || this.tiles[i] === 5) reserved[i] = 1;
     const near = (x, y, rad) => {
       for (let oy = -rad; oy <= rad; oy++) for (let ox = -rad; ox <= rad; ox++) {
@@ -187,6 +192,27 @@
       const cx = G.x + 1 + i * 2, cy = G.y + 1 + row * 2;
       const kind = cropKinds[(i + row) % 4];
       this.crops.push({ x: cx * T + 8, y: cy * T + 12, kind, growth: 0.4 + r() * 0.6, rate: 1 / (70 + r() * 50) });
+    }
+
+    // the Old Glade: a ring of standing stones around the fernlight
+    const stones = [0, 1, 2].map(i => FH.makeStone(i));
+    for (let k = 0; k < 6; k++) {
+      const a = k / 6 * Math.PI * 2 + 0.3;
+      const sx = Math.round(L.glade.x + Math.cos(a) * 3.2), sy = Math.round(L.glade.y + Math.sin(a) * 2.4);
+      if (k === 1) continue; // gap where the trail comes in
+      addProp({ type: 'deco', x: sx * T + 8, y: sy * T + 14, spr: stones[k % 3] });
+      this.solid[this.idx(sx, sy)] = 1; occupied[this.idx(sx, sy)] = 1;
+    }
+    this.fernlight = { x: L.glade.x * T + 8, y: L.glade.y * T + 10 };
+    // blue mushrooms mark the way
+    const glowShroom = FH.makeGlowShrooms();
+    for (let i = 0; i < this.segs.length; i++) {
+      const sg = this.segs[i];
+      if (sg.w !== 4 || i % 3) continue;
+      const side = (i % 6 === 0) ? -12 : 12;
+      const mx = sg.ax + side, my = sg.ay + 4;
+      addProp({ type: 'deco', x: mx, y: my, spr: glowShroom, flat: true });
+      this.lights.push({ x: mx, y: my - 4, r: 18, col: '127,230,240', flick: 2, small: true });
     }
 
     // signpost at the crossroads

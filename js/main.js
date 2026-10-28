@@ -3,7 +3,7 @@
   'use strict';
 
   const G = FH.game, UI = FH.ui;
-  const GAME_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'KeyB', 'KeyI', 'Enter', 'Escape', 'ShiftLeft', 'ShiftRight', 'KeyX', 'KeyR', 'BracketLeft', 'BracketRight', 'Backspace'];
+  const GAME_KEYS = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Tab', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'KeyB', 'KeyI', 'Enter', 'Escape', 'ShiftLeft', 'ShiftRight', 'KeyX', 'KeyR', 'BracketLeft', 'BracketRight', 'Backspace', 'KeyJ', 'KeyC'];
 
   function onKey(code) {
     if (UI.handleKey(code)) { G.keys = {}; return; }
@@ -71,6 +71,7 @@
   }
 
   function boot() {
+    FH.buildUIKit();
     G.init();
     setupTouch();
     UI.title();

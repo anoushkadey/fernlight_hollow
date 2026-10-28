@@ -88,6 +88,8 @@
       desc: 'Brambles and wisps slide right off you. Lasts a little over a minute.' },
     murky: { name: 'Murky Brew', kind: 'Potion', tags: ['potion'], stam: 0, hp: 0,
       desc: "Nobody, including the bottle, knows what this does." },
+    moonlantern: { name: 'Moonlantern', kind: 'Keepsake', tags: ['keepsake'], stam: 0, hp: 0,
+      desc: 'A jar of blue light that never quite sits still.' },
     hex: { name: 'Bitter Hex', kind: 'Potion', tags: ['potion'], stam: -25, hp: -1, toxic: true,
       desc: 'What happens when you brew poison on purpose. Please do not drink this.' },
   };
@@ -249,5 +251,116 @@
       toxicSpotted: { sage: "Lookalike. I'll keep it for the witch." },
       nothingToShake: { willow: 'Nothing around here to shake.' },
     },
+  };
+})(window.FH);
+
+// ---------- the story ----------
+// Steps advance in order. Each has a chapter title, what the journal says to do,
+// and who/where the compass points to.
+(function (FH) {
+  'use strict';
+  FH.STORY = {
+    steps: [
+      { ch: 'I', title: 'The Letter', goal: "Find Grandma Hazel's cottage, east along the path.", target: 'grandma' },
+      { ch: 'I', title: 'The Letter', goal: 'Bring Hazel 2 chanterelles and 2 handfuls of berries for soup.', target: 'grandma' },
+      { ch: 'II', title: 'The Den', goal: "Take Hazel's letter to the witch in the Dark Wood, to the west.", target: 'witch' },
+      { ch: 'II', title: 'The Den', goal: "Brew a Moonlantern in Belladonna's cauldron: a glowcap, a moonleaf and nightberries.", target: 'cauldron' },
+      { ch: 'III', title: 'The Old Glade', goal: 'After dark, find the Fernlight in the Old Glade, far to the north-west.', target: 'glade' },
+      { ch: 'III', title: 'The Old Glade', goal: 'Bring the Fernlight back to Belladonna.', target: 'witch' },
+      { ch: 'IV', title: 'Home', goal: 'Take the Fernlight tonic to Hazel.', target: 'grandma' },
+      { ch: '~', title: 'Stay a While', goal: 'Stay as long as you like. Hazel and Belladonna both have errands.', target: null },
+    ],
+    keyItems: {
+      letter: { name: "Hazel's Letter", desc: 'Sealed with green wax. Addressed, in shaky capitals, to "B."' },
+      lantern: { name: 'Moonlantern', desc: 'A jar of blue light that never quite sits still. Lights your way after dark.' },
+      fernlight: { name: 'The Fernlight', desc: 'A pale bloom that glows like someone left a lamp on inside it.' },
+      tonic: { name: 'Fernlight Tonic', desc: 'Clear and bright green. Smells like the first warm day of the year.' },
+    },
+
+    prologue: {
+      panels: [
+        { art: 'book', text: 'Grandma Hazel used to tell me about a flower that grows deep in the Hollow.' },
+        { art: 'bloom', text: 'It only opens in the dark, and it glows like somebody left a lamp on inside it.' },
+        { art: 'letter', text: '"The garden has gone grey. So have I, a little. Come if you can." Four lines, and the handwriting shook.' },
+        { art: 'walk', text: null },
+      ],
+      walk: {
+        draco: 'I packed three books on botany and one sandwich. In hindsight, the wrong ratio.',
+        sage: "I didn't pack much. The forest usually has what I need.",
+        willow: 'I packed snacks, a spare hoodie, and my best impression of being brave.',
+      },
+    },
+
+    hazelArrive: [
+      ['grandma', 'wide', "Is that— oh, come here. Let me look at you. You've got taller, or I've got shorter. Probably both."],
+      ['grandma', 'open', "Don't fuss, it's only a cough. It came with the grey, same as the garden."],
+      ['me', 'open', {
+        draco: 'Your letter said the garden went grey. Leaf rust? Blight? I read about both on the way here.',
+        sage: "The plants by the fence look sick. Like something's drinking the colour out of them.",
+        willow: 'Grandma, you look tired. And the turnips look worse. No offence to the turnips.',
+      }],
+      ['grandma', 'open', 'It crept out of the Dark Wood this spring. Everything it touches goes grey and quiet. Me included, it seems.'],
+      ['grandma', 'happy', "But first, soup. I can't think on an empty stomach and neither can you. Two chanterelles and two handfuls of berries, love."],
+      ['grandma', 'open', "Mind the chanterelles. There's a lookalike that'll put you in bed for a week. The real ones smell of apricots."],
+    ],
+    hazelWaiting: "Two chanterelles and two handfuls of berries, love. The meadow's full of them. Real chanterelles only.",
+
+    hazelSoup: [
+      ['grandma', 'happy', "Now that's a soup."],
+      [null, null, 'You eat at her small table while the kettle mutters to itself. For a while nobody says anything, and it is nice.'],
+      ['grandma', 'open', 'There is an old story. A flower called the fernlight, deep in the Old Glade, that turns grey things green again. I told it to you at bedtime.'],
+      ['me', 'open', {
+        draco: 'You told me it was a metaphor.',
+        sage: 'You said it was real. I believed you.',
+        willow: 'You always fell asleep before the ending.',
+      }],
+      ['grandma', 'happy', "The ending is: it's real, and I can't walk that far anymore. But someone in the Dark Wood knows the way."],
+      ['grandma', 'open', 'Her name is Belladonna. Give her this. And if she shuts the door on you, knock again. She was always slow to open it.'],
+      [null, null, 'Hazel hands you a letter sealed with green wax. You tuck it somewhere safer than the basket.'],
+    ],
+
+    witchLetter: [
+      ['witch', 'lidded', 'Wipe your feet. Not on the moss. The moss was here first.'],
+      ['witch', 'open', "That's Hazel's handwriting. I'd know it in the dark."],
+      [null, null, 'She reads it twice. The second time, slower.'],
+      ['witch', 'wide', "She signed it 'your sister'. Forty years of nothing, and she signs it like that."],
+      ['me', 'wide', {
+        draco: 'Sister. That explains the shared talent for scolding people.',
+        sage: "You have the same eyes. Tired, but kind.",
+        willow: "SISTER? She told me you were 'a friend in the woods'!",
+      }],
+      ['witch', 'lidded', 'We fell out over a recipe book. I was right. It does not matter now.'],
+      ['witch', 'open', 'The fernlight is real. It grows in the Old Glade, past the wisps, north-west of here. It only opens after dark.'],
+      ['witch', 'open', "You won't find it without a Moonlantern. A glowcap, a moonleaf and some nightberries, brewed in my cauldron. By you. I'm not doing all the work."],
+    ],
+    witchLantern: [
+      ['witch', 'happy', "Look at that. It's ugly and it works. Like most good things."],
+      ['witch', 'open', "Go after dark. Follow the blue mushrooms north-west. And don't let the wisps hug you."],
+    ],
+    budClosed: 'A closed bud, silver-green, about the size of a teacup. It is waiting for something. Probably the dark.',
+    bloomPicked: 'The fernlight opens as you kneel, slow as someone waking up. When you lift it, the whole glade seems to breathe out.',
+    witchCure: [
+      ['witch', 'wide', 'You actually found it.'],
+      ['witch', 'open', 'Hold still. This part is delicate.'],
+      [null, null, 'She works without talking. The cauldron goes from purple to a clear, bright green, and the whole den smells like spring.'],
+      ['witch', 'open', 'Fernlight tonic. Take it to her.'],
+      ['me', 'open', {
+        draco: 'You could deliver it yourself. Statistically, she would like that.',
+        sage: 'She would want to see you.',
+        willow: 'Come with me? Pleeease?',
+      }],
+      ['witch', 'lidded', "...I'll think about it. Go on. Before it cools."],
+    ],
+    hazelCure: [
+      ['grandma', 'open', "What's this, then? It smells like spring."],
+      [null, null, 'She drinks it in three careful sips. The colour comes back to her face first. Then the window seems brighter. Then, all at once, the garden outside rustles like it has been told good news.'],
+      ['grandma', 'happy', 'Well. Would you look at that.'],
+    ],
+    ending: [
+      { art: 'garden', text: 'By morning, the garden had remembered every one of its colours.' },
+      { art: 'door', text: 'Around noon there was a knock at the cottage door. Two knocks, actually. She lost her nerve after the first one.' },
+      { art: 'sisters', text: '"You\'re late," said Hazel. "Forty years," said Belladonna. "I know." Then they argued about the recipe book until supper.' },
+      { art: 'card', text: 'The Hollow keeps its own time. Stay as long as you like.' },
+    ],
   };
 })(window.FH);
